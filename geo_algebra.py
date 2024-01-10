@@ -363,8 +363,8 @@ def estimate_rbm(P_lst,Q_lst):
     scalar = 0
     v = 0
     for i in range(len(P_lst)):
-        A,B,C,D = get_coeffs(P_lst[k])
-        E,F,G,H = get_coeffs(Q_lst[k])
+        A,B,C,D = get_coeffs(P_lst[i])
+        E,F,G,H = get_coeffs(Q_lst[i])
         
         v += ((Rot(A) + E)*~(G+H-Rot(C+D)))(1)
         scalar += mag(A) + mag(E)
@@ -373,6 +373,43 @@ def estimate_rbm(P_lst,Q_lst):
     t_est = v*(1/scalar)
     T_est = 1 + (1/2)*einf*t_est
 
+    return (T_est,R_est)
+
+# From a estimated rotation estimate the translation
+def estimate_translation(R_est,P_lst,Q_lst):
+    def Rot(X):
+        return R_est*X*~R_est
+
+    scalar = 0
+    v = 0
+    for i in range(len(P_lst)):
+        A,B,C,D = get_coeffs(P_lst[i])
+        E,F,G,H = get_coeffs(Q_lst[i])
+        
+        v += ((Rot(A) + E)*~(G+H-Rot(C+D)))(1)
+        scalar += mag(A) + mag(E)
+        #print(scalar)
+
+    t_est = v*(1/scalar)
+    T_est = 1 + (1/2)*einf*t_est
+    return T_est
+
+# Estimate the rigid body motion using the eigendecomposition function
+def estimate_rbm_1(P_lst,Q_lst):
+    vga_rotor_basis = list(vga.basis(grades=[0,2]).values())
+    vga_rec_rotor_basis = reciprocal_blades_vga(vga_rotor_basis)
+
+    # define the rotor valued function
+    def Func(Rotor):
+        out = 0
+        for k in range(len(P_lst)):
+            A,B,C,D = get_coeffs(P_lst[k])
+            E,F,G,H = get_coeffs(Q_lst[k])
+            out += E(1)*Rotor*A(1) - E(2)*Rotor*A(2)
+        return out
+    R_lst,lambda_R = eigen_decomp(Func,vga_rotor_basis,vga_rec_rotor_basis)
+    R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
+    T_est = estimate_translation(R_est,P_lst,Q_lst)
     return (T_est,R_est)
 
 def grade_involution(X):
@@ -430,8 +467,8 @@ def eigen_decomp(F,basis,rec_basis):
         for j in range(len(basis)):
             Y[i] += u[j]*basis[j]
 
-    #Order eigenmultivectors and eigenvalues by the absolute value of the eigenvalues
-    indices = np.argsort(abs(eigenvalues))
+    #Order eigenmultivectors and eigenvalues by the eigenvalues
+    indices = np.argsort(eigenvalues)
     Y_ordered = [Y[i] for i in indices]
     eigenvalues_ordered = eigenvalues[indices]
     

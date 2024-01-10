@@ -11,6 +11,7 @@ find the rotation and the translation.
 '''
 
 
+
 def reflect_list(X_lst,X):
     Y = 0
     for i in range(len(X_lst)):
@@ -51,6 +52,7 @@ q_lst[1] = q_reorder
 
 cga_basis = list(cga.basis(grades=[1,2]).values())
 
+
 def get_func(X_lst):    
     def F(Y):
         out = 0
@@ -85,10 +87,24 @@ Q_oriented = orient_multivectors(Q_lst,q_bar,q_biv)
 
 Q_est_oriented = trans_list(P_oriented,T*R)
 
-T_est,R_est = estimate_rbm(P_oriented,Q_oriented)
+# define the rotor valued function
+def Func(Rotor):
+    out = 0
+    for k in range(len(P_oriented)):
+        A,B,C,D = get_coeffs(P_oriented[k])
+        E,F,G,H = get_coeffs(Q_oriented[k])
+        out += E(1)*Rotor*A(1) - E(2)*Rotor*A(2)
+    return out
 
-print("Angle Error")
-print(np.arccos((R_est*~R)(0))/np.pi*360)
+
+T_est,R_est = estimate_rbm_1(P_oriented,Q_oriented)
+
+t_est = -eo|T_est*2
+ang_error = np.arccos((R_est*~R)(0))/np.pi*360
+if ang_error > 180:
+    ang_error = 360 - ang_error
+print("Angle Error:",ang_error)
+print("Translation Error:", mag(t - t_est))
 
 '''
 # Check that the eigenmultivectors are orthogonal and they are also blades
