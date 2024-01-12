@@ -123,6 +123,7 @@ def normalize_null(X):
     scalar = 1
     if magnitude < eps:
         if abs(pos_cga_dist(X,X) - magnitude) < eps/2:
+            # check if the multivector is null
             scalar = 1/magnitude
     else: 
         scalar = 1/magnitude
@@ -177,6 +178,12 @@ def generate_rdn_PC(m):
         x_lst += [10*np.random.rand()*normalize(rdn_vanilla_vec())]
     return x_lst
 
+def generate_unitcube_rdn_PC(m):
+    x_lst = []
+    for i in range(m):
+        x_lst += [rdn_vanilla_vec()]
+    return x_lst
+
 def vanilla_to_cga_vecs(x_lst):
     p_lst = []
     for x in x_lst:
@@ -184,13 +191,23 @@ def vanilla_to_cga_vecs(x_lst):
 
     return p_lst
 
-def apply_vec_RBM(x_lst,R,t,mu=0,sigma=0.00001):
+def apply_vec_RBM(x_lst,R,t):
     y_lst = []
     for x in x_lst:
-        noise = rdn_gaussian_vec(mu,sigma)
-        y_lst += [R*x*~R + t + noise]
+        y_lst += [R*x*~R + t]
     return y_lst
 
+def gen_gaussian_noise_list(m,mu,sigma):
+    noise = []
+    for i in range(m):
+        noise += [rdn_gaussian_vec(mu,sigma)]
+    return noise
+
+def add_noise(x_lst,noise):
+    y_lst = []
+    for i in range(len(x_lst)):
+        y_lst += [x_lst[i] + noise[i]]
+    return y_lst
 
 def apply_rotation(x_lst,R):
     y_lst = []
