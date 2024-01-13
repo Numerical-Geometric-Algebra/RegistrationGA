@@ -43,6 +43,12 @@ def rdn_vanilla_vec():
 def rdn_multivector():
     return cga.multivector(list(np.random.rand(cga.size()) -0.5*np.ones([cga.size()])))
 
+def rdn_cga_kveclist(m,grade=1):
+    X_lst = [0]*m
+    for i in range(m):
+        X_lst[i] = rdn_kvector(cga,grade)
+    return X_lst
+
 def rdn_rotor():
     a = normalize(rdn_vanilla_vec())
     b = normalize(rdn_vanilla_vec())
@@ -531,7 +537,22 @@ def estimate_rot_SVD(p_lst,q_lst):
     #    q = q_lst[i]
     #    p = p_lst[i]
 
+def get_func(X_lst):
+    def F(Y):
+        out = 0
+        for i in range(len(X_lst)):
+            out += X_lst[i](1)*Y*X_lst[i](1) + X_lst[i](2)*Y*X_lst[i](2) + X_lst[i](3)*Y*X_lst[i](3)
+        return out
+    return F 
 
+def get_eigmvs(p_lst,grades=[1,2]):
+    cga_basis = list(cga.basis(grades=grades).values())
+    cga_rec_basis = reciprocal_blades_cga(cga_basis)
+
+    P_lst,lambda_P = eigen_decomp(get_func(p_lst),cga_basis,cga_rec_basis)
+    P_lst = normalize_null_mvs(P_lst)
+    
+    return (P_lst,lambda_P)
 
 
 def compute_PC_error(t,R,x_lst,y_lst):
@@ -559,3 +580,25 @@ def compute_error_euclidean(R_est,P_lst,Q_lst):
         Q_est = R_est*P*~R_est
         error += mag(Q_est-Q)
     return error/len(P_lst)
+
+def get_properties(X):
+    d = (-einf|X)^einf
+
+    scalar = 1/((einf|X)*(einf|X))(0)
+    l = -(1/2)*scalar*X*einf*X
+    rho_sq = (scalar*X*grade_involution(X))(0)
+    # if X is a vector then the following holds
+    # X = -(eo + l +(1/2)*rho_sq*einf)*(d|eo)
+    return ((-d|eo).list(1)[0][:3],P_I(l(1)).list(1)[0][:3],rho_sq)
+    #return (-d|eo,P_I(l),rho_sq)
+
+
+
+
+def gen_pseudordn_rbm(angle,mag):
+    theta = angle*np.pi/180
+    u = normalize(rdn_vanilla_vec())
+    R = np.cos(theta/2) + I*u*np.sin(theta/2)
+    t = mag*rdn_vanilla_vec()
+    T = 1 + (1/2)*einf*t
+    return (T,R,t)

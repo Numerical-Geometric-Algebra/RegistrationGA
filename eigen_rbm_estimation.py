@@ -1,4 +1,5 @@
 from geo_algebra import *
+import open3d as o3d
 
 '''
 This snippet describes code to determine the rigid body motion between two noisy Point Clouds
@@ -55,7 +56,7 @@ def get_orient_list(X_lst,X_ref):
 def compute_sign_change(lst1,lst2):
     lst = [0]*len(lst1)
     for i in range(len(lst1)):
-        lst[i] = lst1[i]*lst2[i]
+        lst[i] = int(lst1[i]*lst2[i])
     return lst
 
 def get_func(X_lst):
@@ -203,7 +204,7 @@ def brute_force_estimate(P_lst,Q_lst,n=3):
             best_index = i
     
     print(sign_list[best_index])
-    print(max_dist)
+    # print(max_dist)
     # Compute the rotation for the best signs
     for j in range(n): # iterate over the multivectors 
         P_lst_s[j] = P_lst[j]*sign_list[best_index][j] # Change the sign
@@ -223,47 +224,85 @@ def dist_based_orient(P_lst,Q_lst,T,R):
         if dist_neg < dist_pos:
             P_lst[i] *= -1
 
+
+def initialize_vanilla_cloud(lst):
+    x_lst = [0]*len(lst)
+    for i in range(len(lst)):
+        x_lst[i] = vga.multivector(lst[i],grades=1)
+    return x_lst
+    
+def get_array(x_lst):
+    array = np.zeros((len(x_lst),vga.size(1)))
+    for i in range(len(x_lst)):
+        array[i] = np.array(x_lst[i].list(1)[0][:3])
+    return array
+
+def transform_numpy_cloud(pcd,R,t):
+    pts = np.asarray(pcd.points)
+    x_lst = initialize_vanilla_cloud(pts.tolist())
+    y_lst_ = apply_vec_RBM(x_lst,R,t)
+    return get_array(y_lst_)
+
 '''
 Tests to show:
     Varying the number of points with no noise m_points->(2,3,...,100)
     Varying the number of points for different values of noise m_points->(5,6,...,100)
 '''
+if __name__ == "__main__":
+    mu = 0
+    sigma = 0
+    m_points = 100
 
-mu = 0
-sigma = 0
-m_points = 10
-
-max_points = 10
-min_points = 10
-for m_points in range(max_points,min_points-1,-1):
-
-    # x_lst = generate_rdn_PC(m_points)
-    x_lst = generate_unitcube_rdn_PC(m_points)
-    T,R,t = gen_pseudordn_rbm(100,10)
-
-    y_lst_ = apply_vec_RBM(x_lst,R,t)
-    noise  = gen_gaussian_noise_list(m_points,mu,sigma)
-    y_lst = add_noise(y_lst_,noise)
-
-    # Convert to CGA
-    p_lst = vanilla_to_cga_vecs(x_lst)
-    q_lst = vanilla_to_cga_vecs(y_lst)
-
-    # Get the eigenbivectors
-    P_lst,lambda_P = get_eigmvs(p_lst,grades=2)
-    Q_lst,lambda_Q = get_eigmvs(q_lst,grades=2)
-
-    T_est,R_est = brute_force_estimate(P_lst,Q_lst,10)
-    print("Brute Force:")
-    print_metrics(R_est,R,T_est,T,m_points)
+    #pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
+    pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res4.ply')
+    pts = np.asarray(pcd.points)
+    x_lst = initialize_vanilla_cloud(pts.tolist())
+    # p_lst = vanilla_to_cga_vecs(x_lst)
+    # self.P_lst[j],lambda_P = get_eigmvs(p_lst,grades=[1,2])
+    theta = 90*np.pi/180
+    R = np.cos(theta/2) + e2*I*np.sin(theta/2)
+    t = 0.0*e1 + 0.3*e2 + 0.3*e3
+    T = 1 + (1/2)*einf*t
 
 
-    orient_lst = get_orient_diff(P_lst,Q_lst,p_lst,q_lst)
-    P_lst = apply_orientation(P_lst,orient_lst)
-    print(orient_lst)
-    T_est,R_est = estimate_rbm_1(P_lst,Q_lst)
-    print("Easy Orient:")
-    print_metrics(R_est,R,T_est,T,m_points)
+    max_points = 10
+    min_points = 1
+    i = 0
+    for m_points_ in range(max_points,min_points-1,-1):
+        print("Experiment:",i)
+        i += 1
+        # x_lst = generate_rdn_PC(m_points)
+        # x_lst = generate_unitcube_rdn_PC(m_points)
+
+
+        #T,R,t = gen_pseudordn_rbm(100,10)
+        
+
+        y_lst_ = apply_vec_RBM(x_lst,R,t)
+        noise  = gen_gaussian_noise_list(len(x_lst),mu,sigma)
+        y_lst = add_noise(y_lst_,noise)
+
+        # Convert to CGA
+        p_lst = vanilla_to_cga_vecs(x_lst)
+        q_lst = vanilla_to_cga_vecs(y_lst)
+
+        # Get the eigenbivectors
+        P_lst,lambda_P = get_eigmvs(p_lst,grades=2)
+        Q_lst,lambda_Q = get_eigmvs(q_lst,grades=2)
+
+        print("Brute Force:")
+        T_est,R_est = brute_force_estimate(P_lst,Q_lst,10)
+        print_metrics(R_est,R,T_est,T,m_points)
+
+
+        orient_lst = get_orient_diff(P_lst,Q_lst,p_lst,q_lst)
+        P_lst = apply_orientation(P_lst,orient_lst)
+        print(orient_lst)
+        T_est,R_est = estimate_rbm_1(P_lst,Q_lst)
+        print("Easy Orient:")
+        print_metrics(R_est,R,T_est,T,m_points)
+        print(-2*eo|T_est)
+        print(R_est)
 
 
 '''
