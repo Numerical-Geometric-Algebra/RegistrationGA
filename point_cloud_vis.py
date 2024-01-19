@@ -33,14 +33,13 @@ def rotor_to_rotation_matrix(R):
 
 
 class PCViewer3D:
-    def __init__(self,pcds,draw_spheres=True,sigma_iter=0.0005):
+    def __init__(self,pcds,draw_spheres=True,sigma_iter=0.0005,sigma=0.01,rdn_rbm=False):
         self.draw_spheres = draw_spheres
-        self.sigma = 0.01
+        self.sigma = sigma
         self.mu = 0
         self.pcd = pcds
         self.noisy_pcd = [copy.deepcopy(pcds[0]),copy.deepcopy(pcds[1])]
         self.P_lst = [0,0]
-        self.n_points = 100
         self.sigma_iter = sigma_iter
         self.pcd += [0]
         self.noisy_pcd += [0]
@@ -68,24 +67,32 @@ class PCViewer3D:
 
         self.scene.scene.set_background([0.5,0.5,0.5,1.0])
         self.scene.scene.show_axes(True)
+        self.rdn_rbm = rdn_rbm
         
+        self.n_points = np.asarray(self.pcd[0].points).shape[0]
+        
+        self.theta = 0
+        self.t = 0
         self.camera_pos = [0,0,0]
 
-        self.theta = 90*np.pi/180
-        print("nbr points:",np.asarray(self.pcd[j].points).shape[0])
-        # T,R,t = gen_pseudordn_rbm(100,0)
-
-        self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
-        self.t = 0.0*e1 + 0.3*e2 + 0.3*e3
-        self.T = 1 + (1/2)*einf*self.t
+        if self.rdn_rbm:
+            self.T,self.R,self.t = gen_pseudordn_rbm(100,1)
+        else:
+            self.theta = 90*np.pi/180
+            self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
+            self.t = 0.0*e1 + 0.3*e2 + 0.3*e3
+            self.T = 1 + (1/2)*einf*self.t
 
 
         self.update_rbm()
-        self.update_model()
+        #self.update_model()
 
     def update_rbm(self):
-        self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
-        self.T = 1 + (1/2)*einf*self.t
+        if self.rdn_rbm:
+            self.T,self.R,self.t = gen_pseudordn_rbm(100,1)
+        else:
+            self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
+            self.T = 1 + (1/2)*einf*self.t
         pts = transform_numpy_cloud(self.pcd[0],self.R,self.t)
         self.noisy_pcd[1].points = o3d.utility.Vector3dVector(pts)
         self.pcd[1].points = o3d.utility.Vector3dVector(pts)
@@ -96,7 +103,7 @@ class PCViewer3D:
         self.update_pc(1)
         self.estimate_rbm()
         #self.draw_primitives(0)
-        self.draw_primitives(1)
+        #self.draw_primitives(1)
 
     def get_material(self,color):
         transp_mat = o3d.visualization.rendering.MaterialRecord()
@@ -166,9 +173,6 @@ class PCViewer3D:
                 self.update_rbm()
                 self.update_model()
 
-        
-
-
         return gui.Widget.EventCallbackResult.IGNORED
     
     def get_sphere(self,radius_sq,location):
@@ -233,20 +237,20 @@ class PCViewer3D:
         P_lst = apply_orientation(P_lst,orient_lst)
         T_est,R_est = estimate_rbm_1(P_lst,Q_lst)
         t_est = -2*eo|T_est 
-        print_metrics(R_est,self.R,T_est,self.T)
+        print_metrics(R_est,self.R,T_est,self.T,self.n_points)
         #print(-2*eo|T_est)
         #print(R_est)
         self.P_lst[0] = P_lst
         self.P_lst[1] = Q_lst
         
-        
+        # The estimated rotated points in red
         self.pcd[2] = copy.deepcopy(self.pcd[0])
+        # Apply the estimated rotation and translation
         pts = transform_numpy_cloud(self.pcd[0],R_est,t_est)
         self.pcd[2].points = o3d.utility.Vector3dVector(pts)
         color = np.array([[0.0,0.5,0.0]]*pts.shape[0])
         self.pcd[2].colors = o3d.utility.Vector3dVector(color)
         self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
-
         self.update_pc(2)
 
 
@@ -270,7 +274,8 @@ class PCViewer3D:
 
 if __name__ == '__main__':
     # pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
-    pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply')
+    pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res3.ply')
+    # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
     pts = np.asarray(pcd.points)
     # print(pts.tolist())
     # print(pts.shape)
@@ -283,5 +288,5 @@ if __name__ == '__main__':
     pcd1.colors = o3d.utility.Vector3dVector(color)
 
 
-    viewer = PCViewer3D([pcd,pcd1],draw_spheres=False)
+    viewer = PCViewer3D([pcd,pcd1],draw_spheres=False,sigma=0.00,rdn_rbm=True)
     viewer.run()
