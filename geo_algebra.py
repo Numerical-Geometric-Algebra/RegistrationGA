@@ -46,6 +46,8 @@ def get_cga_basis(grades):
     cga_rec_basis = reciprocal_blades_cga(cga_basis)    
     return (cga_basis,cga_rec_basis)
 
+def nparray_to_mvarray(x_array):
+    return vga.multivector(x_array.tolist(),grades=1)
 
 def mag_mv(X):
     return np.sqrt(abs((X*~X)(0)))
@@ -316,10 +318,15 @@ def estimate_rot_vga(X,Y):
     return R_est
     
 
-def rotor_sqrt(R):
+def rotor_sqrt_mv(R):
     theta = np.arccos(R(0))
-    B = normalize(R(2))
+    B = normalize_mv(R(2))
     return np.cos(theta/2) + B*np.sin(theta/2)
+
+def rotor_sqrt(R):
+    theta = mv.arccos(R(0))
+    B = normalize(R(2))
+    return mv.cos(theta/2) + B*mv.sin(theta/2)
 
 def rotmatrix_to_rotor(rot_matrix):
     eigenvalues, eigenvectors = np.linalg.eig(rot_matrix)
@@ -333,10 +340,10 @@ def rotmatrix_to_rotor(rot_matrix):
     cos_theta = (np.trace(rot_matrix) - 1)/2
     sin_theta = -np.trace(Kn@rot_matrix)/2
 
-    u = ga.multivector(list(u),grade=1) # Convert to VGA
+    u = vga.multivector(list(u),grades=1) # Convert to VGA
     rotor = cos_theta + I*u*sin_theta
 
-    return rotor_sqrt(rotor)
+    return rotor_sqrt_mv(rotor)
 
 
 def estimate_rot_SVD(p,q):

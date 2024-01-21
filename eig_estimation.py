@@ -96,9 +96,6 @@ def get_array(x_lst):
 def mvarray_to_nparray(x):
     return np.array(x.tolist(1)[0])[:,:3]
 
-def nparray_to_mvarray(x_array):
-    return vga.multivector(x_array.tolist(),grades=1)
-
 def transform_numpy_cloud(pcd,R,t):
     pts = np.asarray(pcd.points)
     x = nparray_to_mvarray(pts)
