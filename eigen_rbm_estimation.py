@@ -213,6 +213,27 @@ def brute_force_estimate(P_lst,Q_lst,n=3):
     return (T_est,R_est)
 
 
+# This does not work since the sign of the third eigenvector is also ambiguous
+eps = 1e-12
+def brute_force_estimate_VGA(P_lst,Q_lst):
+    n = 2
+    sign_list = get_binary_list(n)
+
+    P_lst_s = [0]*n
+
+    for i in range(len(sign_list)):
+        for j in range(n): # iterate over two of the eigenvectors 
+            P_lst_s[j] = P_lst[j]*sign_list[i][j] # Change the sign
+        
+        R_est = ~exact_rotation(Q_lst[0],Q_lst[1],P_lst_s[0],P_lst_s[1])
+        Q2_est = R_est*P_lst[2]*~R_est
+        
+        # If the third eigenvector is aligned than it is the right rotation
+        if mag_mv(Q2_est - Q_lst[2]) < eps or mag_mv(Q2_est + Q_lst[2]) < eps:
+            print(i)
+    return R_est
+    
+
 def dist_based_orient(P_lst,Q_lst,T,R):
     P_oriented = []
     Q_lst_ = trans_list(P_lst,T*R)

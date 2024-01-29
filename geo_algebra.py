@@ -46,7 +46,15 @@ def get_cga_basis(grades):
     cga_rec_basis = reciprocal_blades_cga(cga_basis)    
     return (cga_basis,cga_rec_basis)
 
-def nparray_to_mvarray(x_array):
+def get_vga_basis(grades):
+    vga_basis = list(vga.basis(grades=grades).values())
+    vga_rec_basis = reciprocal_blades_vga(vga_basis)
+    return (vga_basis,vga_rec_basis)
+
+def nparray_to_mvarray(ga,grade,x_array):
+    return ga.multivector(x_array.tolist(),grades=grade)
+
+def nparray_to_vga_vecarray(x_array):
     return vga.multivector(x_array.tolist(),grades=1)
 
 def mag_mv(X):
@@ -83,7 +91,7 @@ def rdn_gaussian_cga_mvarray(mu,sigma,size):
     x_array = np.random.normal(mu,sigma,[size,mvsize])
     return nparray_to_mvarray(ga,grade,x_array)
 
-def rdn_gaussian_vga_array(mu,sigma,size):
+def rdn_gaussian_vga_vecarray(mu,sigma,size):
     return rdn_gaussian_kvector_array(mu,sigma,vga,1,size)
 
 def rdn_cga_bivector_array(size):
@@ -117,6 +125,9 @@ def rdn_biv():
 # generate random vga vector
 def rdn_vanilla_vec():
     return vga.multivector(list(np.random.rand(vga.size(2))-0.5*np.ones([vga.size(2)])),grades=1)
+
+def rdn_cga_vec():
+    return rdn_kvector(cga,1)
 
 # generate random cga vector
 def rdn_cga_multivector():
@@ -154,6 +165,21 @@ def sqrt_rotor(e,u):
     scalar = 1/np.sqrt((e|u)(0) + 1)
     return (1/np.sqrt(2))*scalar*(e*u + 1)
 
+
+
+def gen_rdn_CGA_rotor():
+    a = rdn_cga_vec()
+    b = rdn_cga_vec()
+    B = normalize_mv(a^b)
+    
+    if (B*~B)(0) < 0:
+        gamma = 10*np.random.rand()
+        return np.cosh(gamma) + B*np.sinh(gamma)
+    else:
+        theta = np.random.rand()*np.pi
+        return np.cos(theta) + B*np.sin(theta)
+    
+    
 
 def dist(X,Y):
     A,B,C,D = get_coeffs(X-Y)
@@ -226,8 +252,7 @@ def normalize_null_mvs(X_lst):
     return X_lst
 
 
-def eigen_decomp(F,basis,rec_basis):
-    # Solves the eigendecomposition of a multilinear transformation F
+def get_matrix(F,basis,rec_basis):
     beta = np.zeros([len(basis),len(basis)])
     mv_lst = [0]*len(basis)
 
@@ -237,8 +262,27 @@ def eigen_decomp(F,basis,rec_basis):
     for i in range(len(basis)):
         for j in range(len(basis)):
             beta[i][j] += (mv_lst[i]*(rec_basis[j]))(0)
+    
+    return beta
+
+# This function computes a function from a matrix 
+# We assume that the matrix was obtained via the above get_matrix function
+def get_func_from_matrix(beta,basis,rec_basis):
+    def F(X):
+        out = 0
+        for i in range(len(matrix)):
+            for j in range(len(matrix)):
+              out += beta[i][j]*(X*rec_basis[i])(0)*basis[j]
+        return out
+    return F
+
+
+def eigen_decomp(F,basis,rec_basis):
+    # Solves the eigendecomposition of a multilinear transformation F
+    beta = get_matrix(F,basis,rec_basis)
 
     eigenvalues, eigenvectors = np.linalg.eig(beta.T)
+
     Y = [0]*len(eigenvalues)
     # Convert the eigenvectors to eigenmultivectors
     for i in range(len(eigenvalues)):
@@ -250,7 +294,8 @@ def eigen_decomp(F,basis,rec_basis):
     indices = np.argsort(abs(eigenvalues))
     Y_ordered = [Y[i] for i in indices]
     eigenvalues_ordered = eigenvalues[indices]
-    
+    for i in range(len(Y_ordered)):
+        Y_ordered[i] = normalize_mv(Y_ordered[i])
     return Y_ordered,np.real(eigenvalues_ordered)
 
 def translation_from_cofm(y,x,R_est,n_points):
@@ -307,7 +352,7 @@ def estimate_rot_CGA(P,S):
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
     return R_est
 
-def estimate_rot_vga(X,Y):
+def estimate_rot_VGA(X,Y):
     basis,rec_basis = get_vga_rotor_basis()
 
     def Func(R):
@@ -316,10 +361,14 @@ def estimate_rot_vga(X,Y):
     R_lst,lambda_R = eigen_decomp(Func,basis,rec_basis)
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
     return R_est
-    
+
+
 
 def rotor_sqrt_mv(R):
-    theta = np.arccos(R(0))
+    if(R(0) > 1):
+        theta = 0
+    else:
+        theta = np.arccos(R(0))    
     B = normalize_mv(R(2))
     return np.cos(theta/2) + B*np.sin(theta/2)
 
@@ -327,6 +376,21 @@ def rotor_sqrt(R):
     theta = mv.arccos(R(0))
     B = normalize(R(2))
     return mv.cos(theta/2) + B*mv.sin(theta/2)
+
+def the_other_rotor_sqrt(R):
+    B = normalize_mv(R(2))
+    s = (R(2)*~B)(0)*(B*~B)(0)
+    c = R(0)
+    t = s/(1+c)
+
+    return normalize_mv(1+B*t)
+
+def exact_rotation(a1,a2,b1,b2):
+    n = normalize_mv(I*((a1-b1)^(a2-b2)))
+    Pperp_a1 = (a1|n)*n
+    P_a1 = (a1^n)*n
+    R_sq = (b1 - Pperp_a1)*inv(P_a1)
+    return rotor_sqrt_mv(R_sq)
 
 def rotmatrix_to_rotor(rot_matrix):
     eigenvalues, eigenvectors = np.linalg.eig(rot_matrix)
@@ -341,9 +405,9 @@ def rotmatrix_to_rotor(rot_matrix):
     sin_theta = -np.trace(Kn@rot_matrix)/2
 
     u = vga.multivector(list(u),grades=1) # Convert to VGA
-    rotor = cos_theta + I*u*sin_theta
+    rotor = cos_theta - I*u*sin_theta
 
-    return rotor_sqrt_mv(rotor)
+    return the_other_rotor_sqrt(rotor)
 
 
 def estimate_rot_SVD(p,q):

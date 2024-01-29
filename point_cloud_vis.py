@@ -5,6 +5,7 @@ import numpy as np
 import copy
 from scipy.spatial.transform import Rotation
 from eig_estimation import *
+import benchmark
 
 import os, pickle
 from pathlib import Path
@@ -83,7 +84,8 @@ def get_point_clouds(cfg,base_dir,item=-1):
 
     src_path = change_ext_subdir(src_path_,"fragments",".ply")
     tgt_path = change_ext_subdir(tgt_path_,"fragments",".ply")
-
+    print(src_path_)
+    print(cfg.keys())
     
 
     pose_src_path = change_ext_subdir(src_path_,"poses",".txt")
@@ -104,7 +106,7 @@ def get_point_clouds(cfg,base_dir,item=-1):
     # apply_rbm(tgt_pcd,tgt_rbm)
 
     # R = rotmatrix_to_rotor(rot)
-    # t = nparray_to_mvarray(trans.T[0])
+    # t = nparray_to_vga_vecarray(trans.T[0])
     # print(R)
     # print(t)
     
@@ -152,6 +154,7 @@ class PCViewer3D:
         self.material[0] = self.get_material([0.0,0.0,1.0])
         self.material[1] = self.get_material([1.0,0.0,0.0])
         self.material[2] = self.get_material([0.0,1.0,0.0])
+
         self.scene.scene.add_geometry("Point Cloud0", self.noisy_pcd[0], self.material[0])
         # self.scene.scene.add_geometry("Point Cloud1", self.noisy_pcd[1], self.material)
 
@@ -171,17 +174,19 @@ class PCViewer3D:
         self.cylinder_mat_neg = self.get_material([0.0,1.0,0.0])
 
         self.scene.scene.set_background([0.5,0.5,0.5,1.0])
-        self.scene.scene.show_axes(True)
+        # self.scene.scene.show_axes(True)
         self.rdn_rbm = rdn_rbm
         
         self.n_points = np.asarray(self.pcd[0].points).shape[0]
-        
+        self.algorithm = None
+
         self.theta = 0
         self.t = 0
         self.camera_pos = [0,0,0]
 
         if self.rdn_rbm:
-            self.T,self.R,self.t = gen_pseudordn_rbm(100,1)
+            self.T,self.R = gen_pseudordn_rbm(100,1)
+            self.t = -eo|self.T*2
         else:
             self.theta = 90*np.pi/180
             self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
@@ -196,19 +201,25 @@ class PCViewer3D:
 
         # self.update_pc(0)
         # self.update_pc(1)
+        
         self.compare_primitives = compare_primitives
         if not self.compare_primitives:
             self.update_rbm()
         else:
-            self.update_pc(0)
-            self.update_pc(1)
-            self.compute_primitives(0)
-            self.compute_primitives(1)
+            self.draw_noisy_PCs()
+        
+    def draw_noisy_PCs(self):
+        self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
+        self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
+        
+        self.update_pc(0)
+        self.update_pc(1)
 
-            self.draw_primitives(0)
-            self.draw_primitives(1)
+        self.compute_primitives(0)
+        self.compute_primitives(1)
 
-
+        self.draw_primitives(0)
+        self.draw_primitives(1)
 
     # Get relative translation error scale
     def get_scale_rte(self):
@@ -217,6 +228,7 @@ class PCViewer3D:
 
     # Adds noise to pcd then stores the result in noisy_pcd
     def add_noise(self,pcd,noisy_pcd):
+        
         pts = np.copy(np.asarray(pcd.points))
         noise = np.random.normal(self.mu,self.sigma,size=pts.shape)
         pts += noise
@@ -224,20 +236,21 @@ class PCViewer3D:
 
     def update_rbm(self):
         if self.rdn_rbm:
-            self.T,self.R,self.t = gen_pseudordn_rbm(100,1)
+            self.T,self.R = gen_pseudordn_rbm(100,1)
+            self.t = -eo|self.T*2
         else:
             self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
             self.T = 1 + (1/2)*einf*self.t
         # Applies a transformation to pcd[1] and stores it in noisy_pcd[1]
         pts = transform_numpy_cloud(self.pcd[1],self.R,self.t)
-        self.noisy_pcd[1].points = o3d.utility.Vector3dVector(pts)
-        self.add_noise(self.noisy_pcd[1],self.noisy_pcd[1])
-
+        self.pcd[1].points = o3d.utility.Vector3dVector(pts)
         self.update_model()
 
     def update_model(self):
-        # make noisy_pcd[0] a noisy version of pcd[0]
-        self.add_noise(self.pcd[0],self.noisy_pcd[0])
+
+        # Add noise to the point clouds
+        self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
+        self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
         
         self.estimate_rbm()
 
@@ -249,6 +262,9 @@ class PCViewer3D:
 
         self.draw_primitives(0)
         self.draw_primitives(2)
+        
+        self.draw_CeOM(0)
+        self.draw_CeOM(2)
 
         
         # self.draw_primitives(1)
@@ -269,6 +285,7 @@ class PCViewer3D:
 
 
     def update_pc(self,j):
+        # print("Updating Point Cloud "+str(j))
         self.scene.scene.remove_geometry("Point Cloud"+str(j))
         self.scene.scene.add_geometry("Point Cloud"+str(j), self.noisy_pcd[j], self.material[j])
 
@@ -279,42 +296,55 @@ class PCViewer3D:
         if e.key == gui.KeyName.K:
             if e.type == gui.KeyEvent.UP:  
                 self.sigma += self.sigma_iter
-                self.update_model()
+                if self.compare_primitives:
+                    self.draw_noisy_PCs()
+                else:
+                    self.update_model()
         if e.key == gui.KeyName.J:
             if e.type == gui.KeyEvent.UP:  
                 self.sigma -= self.sigma_iter
                 if self.sigma < 0:
-                    self.sigma = 0                
-                self.update_model()
+                    self.sigma = 0
+                if self.compare_primitives:
+                    self.draw_noisy_PCs()
+                else:
+                    self.update_model()
 
         if e.key == gui.KeyName.Q:
             gui.Application.instance.quit()
         if e.key == gui.KeyName.SPACE:
-            self.update_model()
+            if self.compare_primitives:
+                self.draw_noisy_PCs()
+            else:
+                self.update_model()
         if e.key == gui.KeyName.C:
             self.scene.setup_camera(60, self.scene.scene.bounding_box, (0, 0, 0))
 
         if e.key == gui.KeyName.W:
             if e.type == gui.KeyEvent.UP: 
                 self.t += 0.01*e1
-                self.update_rbm()
-                self.update_model()
+                if not self.compare_primitives:
+                    self.update_rbm()
+                    self.update_model()
         if e.key == gui.KeyName.S:
             if e.type == gui.KeyEvent.UP: 
                 self.t -= 0.01*e1
-                self.update_rbm()
-                self.update_model()
+                if not self.compare_primitives:
+                    self.update_rbm()
+                    self.update_model()
 
         if e.key == gui.KeyName.A:
             if e.type == gui.KeyEvent.UP:
                 self.theta += 1/np.pi
-                self.update_rbm()
-                self.update_model()
+                if not self.compare_primitives:
+                    self.update_rbm()
+                    self.update_model()
         if e.key == gui.KeyName.D:
             if e.type == gui.KeyEvent.UP:
                 self.theta -= 1/np.pi
-                self.update_rbm()
-                self.update_model()
+                if not self.compare_primitives:
+                    self.update_rbm()
+                    self.update_model()
 
         return gui.Widget.EventCallbackResult.IGNORED
     
@@ -329,7 +359,39 @@ class PCViewer3D:
             material = self.transp_mat
         return sphere,material
 
+    def calculate_zy_rotation_for_arrow(self,vec):
+        gamma = np.arctan2(vec[1], vec[0])
+        Rz = np.array([
+                        [np.cos(gamma), -np.sin(gamma), 0],
+                        [np.sin(gamma), np.cos(gamma), 0],
+                        [0, 0, 1]
+                    ])
+
+        vec = Rz.T @ vec
+
+        beta = np.arctan2(vec[0], vec[2])
+        Ry = np.array([
+                        [np.cos(beta), 0, np.sin(beta)],
+                        [0, 1, 0],
+                        [-np.sin(beta), 0, np.cos(beta)]
+                    ])
+        return Rz, Ry
     
+    def get_arrow(self, end, origin=np.array([0, 0, 0]), scale=1):
+        vec = end - origin
+        size = 1
+        # size = np.sqrt(np.sum(vec**2))
+        Rz, Ry = self.calculate_zy_rotation_for_arrow(vec)
+        mesh = o3d.geometry.TriangleMesh.create_arrow(cone_radius=size/17.5 * scale,
+        cone_height=size*0.2 * scale,
+        cylinder_radius=size/30 * scale,
+        cylinder_height=size*(1 - 0.2*scale))
+        mesh.rotate(Ry, center=np.array([0, 0, 0]))
+        mesh.rotate(Rz, center=np.array([0, 0, 0]))
+        mesh.translate(origin)
+        mesh.compute_vertex_normals()
+        return mesh
+
     def get_circle(self,radius_sq,position,normal):
 
         # Create a cylinder along the given normal vector
@@ -355,50 +417,53 @@ class PCViewer3D:
         else:
             material = self.cylinder_mat
         return cylinder,material
+    
+    # Draw Center Of Mass (CeOM) of point cloud i
+    def draw_CeOM(self,i):
+        self.scene.scene.remove_geometry('CeOM'+str(i))
+
+        x_pts = np.asarray(self.noisy_pcd[i].points)
+        x_bar = x_pts.sum(axis=0)/self.n_points
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.005,resolution=20)
+        sphere.compute_vertex_normals()
+        sphere.paint_uniform_color([0.7, 0.1, 0.1])  # To be changed to the point color.
+        sphere = sphere.translate(x_bar)
+        material = self.material[i]
+        self.scene.scene.add_geometry('CeOM'+str(i),sphere,material)
 
 
     def estimate_rbm(self):
+        
+        if(self.algorithm is None):
+            self.algorithm = self.get_default_algorithm()
+        
         x_pts = np.asarray(self.noisy_pcd[0].points)
         y_pts = np.asarray(self.noisy_pcd[1].points)
 
         # Convert numpy array to multivector array
-        x = nparray_to_mvarray(x_pts)
-        y = nparray_to_mvarray(y_pts)
-
-        # Convert to CGA
-        p = eo + x + (1/2)*mag_sq(x)*einf 
-        q = eo + y + (1/2)*mag_sq(y)*einf
-
-        # Get the eigenbivectors
-        P_lst,lambda_P = get_eigmvs(p,grades=self.eig_grades)
-        Q_lst,lambda_Q = get_eigmvs(q,grades=self.eig_grades)
-
-        # Transform list of multivectors into an array
-        P = mv.concat(P_lst)
-        Q = mv.concat(Q_lst)
-
-        # Orient the eigenbivectors by using the points p and q as a reference
-        signs = get_orient_diff(P,Q,p,q)
-        P = P*signs
-        T_est,R_est = estimate_rbm(P,Q)
-        T_est = translation_from_cofm(y,x,R_est,self.n_points)
-        t_est = -2*eo|T_est
+        x = nparray_to_vga_vecarray(x_pts)
+        y = nparray_to_vga_vecarray(y_pts)
         
-        Q_est = T_est*R_est*P*~R_est*~T_est
-        q_bar = q.sum()/self.n_points
-        q_bar_est = T_est*R_est*p.sum()*~R_est*~T_est/self.n_points
+        # Use the chosen algorithm to estimate the RBM
+        T_est,R_est,P_lst,Q_lst = self.algorithm(x,y,self.n_points)
 
-        print("Primitives Error:",mag_sq(P_I(Q_est - Q)).sum())
-        print("Center of Mass of q:",q_bar)
-        print("Center of Mass of q_est:",q_bar_est)
-        print("Center of Mass diff :" , q_bar - q_bar_est)
+        t_est = -2*eo|T_est
+            
+        # Q_est = T_est*R_est*P*~R_est*~T_est
+        # q_bar = q.sum()/self.n_points
+        # q_bar_est = T_est*R_est*p.sum()*~R_est*~T_est/self.n_points
+
+        # print("Primitives Error:",mag_sq(P_I(Q_est - Q)).sum())
+        # print("Center of Mass of q:",q_bar)
+        # print("Center of Mass of q_est:",q_bar_est)
+        # print("Center of Mass diff :" , q_bar - q_bar_est)
 
         # Save the list of eigenmultivectors
         self.P_lst[0] = P_lst
         self.P_lst[1] = Q_lst
         
         # Calculate the estimated point cloud from x and from y
-        y_est = R_est*x*~R_est + t_est
+        # y_est = R_est*x*~R_est + t_est
         x_est = ~R_est*(y - t_est)*R_est
         
         print_metrics(R_est,self.R,T_est,self.T,self.n_points,self.sigma)
@@ -408,14 +473,37 @@ class PCViewer3D:
         self.pcd[2].points = o3d.utility.Vector3dVector(x_pts)
         self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
 
+    def get_default_algorithm(self):
+        def algorithm_0(x,y,npoints):
+
+            # Convert to CGA
+            p = eo + x + (1/2)*mag_sq(x)*einf
+            q = eo + y + (1/2)*mag_sq(y)*einf
+
+            # Get the eigenbivectors
+            P_lst,lambda_P = get_eigmvs(p,grades=self.eig_grades)
+            Q_lst,lambda_Q = get_eigmvs(q,grades=self.eig_grades)
+
+            # Transform list of multivectors into an array
+            P = mv.concat(P_lst)
+            Q = mv.concat(Q_lst)
+
+            # Orient the eigenbivectors by using the points p and q as a reference
+            signs = get_orient_diff(P,Q,p,q)
+            P = P*signs
+            T_est,R_est = estimate_rbm(P,Q)
+            # T_est = translation_from_cofm(y,x,R_est,self.n_points)
+            return (T_est,R_est,P_lst,Q_lst)
+        return algorithm_0
+
     def compute_primitives(self,j):
         # Do not compute primitives if not drawing
-        if self.draw_primitives_bool[0] == False and  self.draw_primitives_bool[1] == False:
+        if self.draw_primitives_bool[0] == False and  self.draw_primitives_bool[1] == False and self.draw_primitives_bool[2] == False:
             return
         x_pts = np.asarray(self.noisy_pcd[j].points)
         
         # Convert numpy array to multivector array
-        x = nparray_to_mvarray(x_pts)
+        x = nparray_to_vga_vecarray(x_pts)
 
         # Convert to CGA
         p = eo + x + (1/2)*mag_sq(x)*einf 
@@ -427,8 +515,12 @@ class PCViewer3D:
 
     def draw_primitives(self,j):
         self.remove_primitives(j)
-        if self.draw_primitives_bool[0] == False and self.draw_primitives_bool[1] == False:
+        if self.draw_primitives_bool[0] == False and self.draw_primitives_bool[1] == False and self.draw_primitives_bool[2] == False:
             return
+
+        # value = check_orthogonality(self.P_lst[0])
+        # value = check_orthogonality(self.P_lst[1])
+
         for i in range(len(self.P_lst[j])):
             d,l,radius_sq = get_properties(self.P_lst[j][i])
             d_array = np.array(d)
@@ -444,10 +536,20 @@ class PCViewer3D:
                     self.scene.scene.add_geometry(str(j)+'primitive'+str(i),
                                                 primitive,
                                                 self.primitive_material[j])
-            
+            if self.draw_primitives_bool[2]:
+                A,B,C,D = get_coeffs(self.P_lst[j][i])
+                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]))
+                self.scene.scene.add_geometry(str(j)+'Arrow'+str(i),
+                                                    arrow,
+                                                    self.primitive_material[j])
+                # print(np.array(A.tolist(1)[0][:3]))
+                
+        # print()
+
     def remove_primitives(self,j):
         for i in range(15):
             self.scene.scene.remove_geometry(str(j)+'primitive'+str(i))
+            self.scene.scene.remove_geometry(str(j)+'Arrow'+str(i))
 
 
 if __name__ == '__main__':
@@ -458,25 +560,42 @@ if __name__ == '__main__':
     -501: 0.69 of overlap: Good registration
     '''
     # pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
-    # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
-    base_dir =  f'/home/francisco/3dmatch/'
-    cfg = load_3DMatch_PCs(base_dir)
-    src_pcd,tgt_pcd = get_point_clouds(cfg,base_dir,-10)
     
 
+    sigma = 0.01
+    # sigma = 0
+
+    # Get single bunny 
+    # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
+    pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
+    src_pcd = pcd
+    tgt_pcd = copy.deepcopy(src_pcd)
+
+    # base_dir =  f'/home/francisco/3dmatch/'
+    # cfg = load_3DMatch_PCs(base_dir)
+    # src_pcd,tgt_pcd = get_point_clouds(cfg,base_dir,-1)
+    
+    # Add outlier
+    # outlier = np.ones([1,3])*0.1
+    # pts = np.r_[np.asarray(tgt_pcd.points),outlier]
+    # tgt_pcd.points = o3d.utility.Vector3dVector(pts)
+
     # Change color of target point cloud
-    pts = np.asarray(src_pcd.points)
+    pts = np.asarray(tgt_pcd.points)
     n_points = pts.shape[0]
     color = np.array([[0,0,0.5]]*n_points)
     tgt_pcd.colors = o3d.utility.Vector3dVector(color)
     
+    
     # Change color of source point cloud
-    pts = np.asarray(tgt_pcd.points)
+    pts = np.asarray(src_pcd.points)
     n_points = pts.shape[0]
     color = np.array([[0.5,0,0]]*n_points)
     src_pcd.colors = o3d.utility.Vector3dVector(color)
 
-    viewer = PCViewer3D([tgt_pcd,src_pcd],draw_primitives=[False,True],sigma=0.00,rdn_rbm=True,eig_grades=2)
+    viewer = PCViewer3D([tgt_pcd,src_pcd],draw_primitives=[False,False,False],sigma=sigma,rdn_rbm=True,eig_grades=2,compare_primitives=False)
+    # viewer.algorithm = benchmark.estimate_transformation_1
+    viewer.update_model()
     viewer.run()
 
     '''
