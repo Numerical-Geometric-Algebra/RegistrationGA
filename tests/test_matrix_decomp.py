@@ -1,4 +1,16 @@
-from benchmark_rot import *
+import sys
+import os
+ 
+# Path of this file
+current = os.path.dirname(os.path.realpath(__file__))
+ 
+# parent directory of this file
+parent = os.path.dirname(current)
+ 
+# add the parent directory to the sys.path.
+sys.path.append(parent)
+
+from benchmark import *
 
 def rotor_sqrt_choose(R):
     B = normalize_mv(R(2))
@@ -161,25 +173,39 @@ def RBM_versors(W):
 
     return (T,normalize_mv(P_I(R)))
 
+def get_rot_func(A):
+    B,_ = get_cga_basis(1)
+    def F_diff(X):
+        out = 0
+        for i in range(len(A)):
+            out += (X*A[i])(0)*B[i]
+        return out
 
+    def F_adj(X):
+        out = 0
+        for i in range(len(A)):
+            out += (X*B[i])(0)*A[i]
+        return out
 
-def get_H_funcs(P_lst,Q_lst):
-    F_diff,F_adj = get_rot_func(P_lst)
-    G_diff,G_adj = get_rot_func(Q_lst)
+    return F_diff,F_adj
 
-    def H_diff(X):
-        return G_adj(F_diff(X))
+# def get_H_funcs(P_lst,Q_lst):
+#     F_diff,F_adj = get_rot_func(P_lst)
+#     G_diff,G_adj = get_rot_func(Q_lst)
 
-    def H_adj(X):
-        return F_adj(G_diff(X))
+#     def H_diff(X):
+#         return G_adj(F_diff(X))
 
-    def H_plus(X):
-        return (G_adj(F_diff(X)) + F_adj(G_diff(X)))/2
+#     def H_adj(X):
+#         return F_adj(G_diff(X))
+
+#     def H_plus(X):
+#         return (G_adj(F_diff(X)) + F_adj(G_diff(X)))/2
     
-    def H_minus(X):
-        return (G_adj(F_diff(X)) - F_adj(G_diff(X)))/2
+#     def H_minus(X):
+#         return (G_adj(F_diff(X)) - F_adj(G_diff(X)))/2
 
-    return H_diff,H_adj,H_plus,H_minus
+#     return H_diff,H_adj,H_plus,H_minus
 
 def check_square_root(R,R_sq):
     print("Type of rotor:",(R(2)*~R(2))(0))
@@ -199,7 +225,7 @@ if __name__ == "__main__":
     sigma = 0
     npoints = pts.shape[0]
 
-    T,R = gen_pseudordn_rbm(100,10)
+    T,R = gen_pseudordn_rbm(0,10)
     t = -2*eo|T
     noise = rdn_gaussian_vga_vecarray(0,sigma,npoints)
 
@@ -213,7 +239,16 @@ if __name__ == "__main__":
     P_lst,lambda_P = get_eigmvs(p,grades=1)
     Q_lst,lambda_Q = get_eigmvs(q,grades=1)
 
-    H_diff,H_adj,H_plus,H_minus = get_H_funcs(P_lst,Q_lst)
+    P = mv.concat(P_lst)
+    Q = mv.concat(Q_lst)
+
+    # def F_test(x):
+    #     out = 0
+    #     for i in range(len(P_lst)):
+    #         out += (x*P_lst[i])(0)*inv(P_lst[i])
+    #     return out
+
+    H_diff,H_adj = get_H_funcs(P_lst,Q_lst)
 
     basis = [eo,e1,e2,e3,einf]
     rec_basis = [-einf,e1,e2,e3,-eo]
@@ -224,6 +259,9 @@ if __name__ == "__main__":
     R_matrix = H_matrix[1:4,1:4]
 
     R_est = rotmatrix_to_rotor(R_matrix)
+    print(R_matrix@R_matrix.T)
+
+    print(np.arccos((R*~R_est)(0))/np.pi*360)
 
     # basis,rec_basis = get_cga_basis(1)
     # W,lambda_W = eigen_decomp(H_plus,basis,rec_basis)

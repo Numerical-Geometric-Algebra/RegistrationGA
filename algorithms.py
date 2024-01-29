@@ -271,19 +271,16 @@ def estimate_transformation_6(x,y,npoints):
     return (T_est,R_est,P_lst1,P_lst2)
 
 def get_H_funcs(A,B):
-    if len(A) != len(B):
-        return None
-
     def H_diff(x):
         out = 0
         for i in range(len(A)):
-            out += (x|A[i])*B[i]
+            out += (x*A[i])(0)*inv(B[i])
         return out
 
     def H_adj(x):
         out = 0
         for i in range(len(B)):
-            out += (x|B[i])*A[i]
+            out += (x*inv(B[i]))(0)*A[i]
         return out
 
     return H_diff,H_adj
@@ -314,7 +311,7 @@ def estimate_transformation_8(x,y,npoints):
     t_vec = H_matrix[1:4,0]
     R_matrix = H_matrix[1:4,1:4]
 
-    R_est = rotmatrix_to_rotor(R_matrix)
+    R_est = the_other_rotmatrix_to_rotor(R_matrix)
     t_est = nparray_to_vga_vecarray(t_vec)
 
     T_est = 1 + (1/2)*einf*t_est
@@ -538,7 +535,6 @@ def estimate_rotation_6(x,y,npoints):
     V_lst,lambda_V = eigen_decomp(H_plus,basis,rec_basis)
 
     R_est = ~the_other_rotor_sqrt(V_lst[0]*H_diff(V_lst[0]))
-    print(lambda_V)
 
     return (1,R_est,P_lst,Q_lst)
 

@@ -1,34 +1,9 @@
 from eig_estimation import *
 import open3d as o3d
 import matplotlib.pyplot as plt
+from algorithms import *
 
-
-# def get_metrics(R,R_est,T,T_est):
-#     t = -eo|T*2
-#     t_est = -eo|T_est*2
-#     costheta = (R_est*~R)(0)
-#     if abs(costheta) > 1:
-#         costheta = 1
-#     ang_error = np.arccos(costheta)/np.pi*360 # gets two times theta
-#     if ang_error > 180:
-#         ang_error = 360 - ang_error
-
-#     # Compute the magnitude of tranlation error
-#     t_error = mag_mv(t - t_est)
-
-#     # Compute the error between the planes of rotation
-#     cosphi = (normalize_mv(R(2))*~normalize_mv(R_est(2)))(0)
-#     if abs(cosphi) > 1:
-#         cosphi = 1
-#     phi = np.arccos(cosphi)/np.pi*180
-#     if(phi > 180):
-#         phi = 360 - phi
-
-#     return ang_error,t_error,phi
-
-def benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutliners,maxoutlier):
-    # get the translation vector
-    t = -eo|T*2
+def benchmark(pts,sigma,algorithms,rotangle,tscaling,niters,noutliners,maxoutlier):
     nalgorithms = len(algorithms)
 
     ang_error = np.zeros([nalgorithms,niters])
@@ -36,9 +11,10 @@ def benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutliners,maxoutlie
     plane_error = np.zeros([nalgorithms,niters])
     
     for i in range(niters):
-        rot_angle = np.random.rand()*360
-        T,R = gen_pseudordn_rbm(rot_angle,10)
-        t = -eo|T*2
+        T,R = gen_pseudordn_rbm(rotangle,tscaling)
+        t = -eo|T*2 # get the translation vector
+
+        # Add random outliers
         outliers = maxoutlier*np.random.rand(noutliners,3)
         pts_with_outliers = np.r_[outliers,pts]
         npoints = pts.shape[0]
@@ -53,201 +29,160 @@ def benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutliners,maxoutlie
 
     return ang_error,pos_error,plane_error
 
-def benchmark_algorithms(x,R,T,npoints,sigma,algorithms,nalgorithms,niters):
-    
-    # get the translation vector
-    t = -eo|T*2
+def run_experiments(pts,experiments,algorithms):
+    benchmark_angle_worst_array = np.zeros([len(experiments),len(algorithms)])
+    benchmark_pos_worst_array = np.zeros([len(experiments),len(algorithms)])
 
-    ang_error = np.zeros([nalgorithms,niters])
-    pos_error = np.zeros([nalgorithms,niters])
-    plane_error = np.zeros([nalgorithms,niters])
-    
-    for i in range(niters):
-        noise = rdn_gaussian_vga_vecarray(0,sigma,npoints)
-        y = R*x*~R + t + noise
-        for j in range(nalgorithms):
-            T_est,R_est,_,_ = algorithms[j](x,y,npoints)
-            ang_error[j][i],pos_error[j][i],plane_error[j][i] = get_metrics(R,R_est,T,T_est)
+    benchmark_angle_best_array = np.zeros([len(experiments),len(algorithms)])
+    benchmark_pos_best_array = np.zeros([len(experiments),len(algorithms)])
 
-    return ang_error,pos_error,plane_error
+    benchmark_angle_mean_array = np.zeros([len(experiments),len(algorithms)])
+    benchmark_pos_mean_array = np.zeros([len(experiments),len(algorithms)])
 
+    i = 0
+    for exp in experiments:
+        print("Experiment:",exp)
+        benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['rot_angle'],exp['trans_scaling'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
 
-if __name__ == '__main__':
-    
-    # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
-    pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
-    pts = np.asarray(pcd.points)
-    # algorithms = [estimate_transformation_0,estimate_transformation_1,estimate_transformation_4]
-    algorithms = [estimate_transformation_1,estimate_transformation_6,estimate_transformation_4]
-    alg_name = ["CGA CeOM","VGA 2F_CoSign","VGA CoSign_2"]
-    # algorithms = [estimate_transformation_7]
-    # alg_name = ["CGA BruteForce"]
-    niters = 1
-    sigma = 0
-    bench_sigma = True
-    bench_outliers = False
+        benchmark_angle_worst_array[i] =  benchmark_values[0].max(axis=1)
+        benchmark_angle_best_array[i] =  benchmark_values[0].min(axis=1)
+        benchmark_angle_mean_array[i] =  benchmark_values[0].sum(axis=1)/len(benchmark_values[0])
 
-    if bench_sigma:
-
-        npoints = pts.shape[0]
-
-        x = nparray_to_vga_vecarray(pts)
-        T,R = gen_pseudordn_rbm(100,10)
-        
-        sigmas = np.arange(0.000,0.041,0.002)
-        # sigmas = np.arange(0.000,0.003,0.001)
-        
-        benchmark_angle_worst_array = np.zeros([len(sigmas),len(algorithms)])
-        benchmark_pos_worst_array = np.zeros([len(sigmas),len(algorithms)])
-
-        benchmark_angle_best_array = np.zeros([len(sigmas),len(algorithms)])
-        benchmark_pos_best_array = np.zeros([len(sigmas),len(algorithms)])
-
-        benchmark_angle_mean_array = np.zeros([len(sigmas),len(algorithms)])
-        benchmark_pos_mean_array = np.zeros([len(sigmas),len(algorithms)])
-
-        i = 0
-        for sigma in sigmas:
-            T,R = gen_pseudordn_rbm(100,10)
-            print("Sigma:",sigma)
-            benchmark_values = benchmark_algorithms(x,R,T,npoints,sigma,algorithms,len(algorithms),niters)
-            
-            benchmark_angle_worst_array[i] =  benchmark_values[0].max(axis=1)
-            benchmark_angle_best_array[i] =  benchmark_values[0].min(axis=1)
-            benchmark_angle_mean_array[i] =  benchmark_values[0].sum(axis=1)/len(benchmark_values[0])
-
-            benchmark_pos_worst_array[i] =  benchmark_values[1].max(axis=1)
-            benchmark_pos_best_array[i] =  benchmark_values[1].min(axis=1)
-            benchmark_pos_mean_array[i] =  benchmark_values[1].sum(axis=1)/len(benchmark_values[1])
-            i += 1
-        
-        x_axis = sigmas
-    
+        benchmark_pos_worst_array[i] =  benchmark_values[1].max(axis=1)
+        benchmark_pos_best_array[i] =  benchmark_values[1].min(axis=1)
+        benchmark_pos_mean_array[i] =  benchmark_values[1].sum(axis=1)/len(benchmark_values[1])
+        i += 1
+    bench_rot = [benchmark_angle_worst_array,benchmark_angle_best_array,benchmark_angle_mean_array]
+    bench_pos = [benchmark_pos_worst_array,benchmark_pos_best_array,benchmark_pos_mean_array]
+    return (bench_rot,bench_pos)
 
 
-    elif bench_outliers:
-        noutliers = np.arange(0,51,1)
-        benchmark_angle_worst_array = np.zeros([len(noutliers),len(algorithms)])
-        benchmark_pos_worst_array = np.zeros([len(noutliers),len(algorithms)])
+def get_outliers_experiments(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier):
+    lst = [0]*len(n_outliers)
+    for i in range(len(n_outliers)):
+        dct = {}
+        dct['sigma'] = sigma
+        dct['rot_angle'] = rot_angle
+        dct['trans_scaling'] = trans_scaling
+        dct['n_iters'] = niters
+        dct['max_dist_outlier'] = max_dist_outlier
+        dct['n_outliers'] = n_outliers[i]
+        lst[i] = dct
 
-        benchmark_angle_best_array = np.zeros([len(noutliers),len(algorithms)])
-        benchmark_pos_best_array = np.zeros([len(noutliers),len(algorithms)])
+    return lst
 
-        benchmark_angle_mean_array = np.zeros([len(noutliers),len(algorithms)])
-        benchmark_pos_mean_array = np.zeros([len(noutliers),len(algorithms)])
+def get_max_dist_outliers_experiments(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier):
+    lst = [0]*len(max_dist_outlier)
+    for i in range(len(max_dist_outlier)):
+        dct = {}
+        dct['sigma'] = sigma
+        dct['rot_angle'] = rot_angle
+        dct['trans_scaling'] = trans_scaling
+        dct['n_iters'] = niters
+        dct['n_outliers'] = n_outliers
+        dct['max_dist_outlier'] = max_dist_outlier[i]
+        lst[i] = dct
 
-        maxoutlier = 1
-        i = 0
-        for noutlier in noutliers:
-            T,R = gen_pseudordn_rbm(100,10)
-            print("N Outliers:",noutlier)
-            benchmark_values = benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutlier,maxoutlier)
-            
-            benchmark_angle_worst_array[i] =  benchmark_values[0].max(axis=1)
-            benchmark_angle_best_array[i] =  benchmark_values[0].min(axis=1)
-            benchmark_angle_mean_array[i] =  benchmark_values[0].sum(axis=1)/len(benchmark_values[0])
+    return lst
 
-            benchmark_pos_worst_array[i] =  benchmark_values[1].max(axis=1)
-            benchmark_pos_best_array[i] =  benchmark_values[1].min(axis=1)
-            benchmark_pos_mean_array[i] =  benchmark_values[1].sum(axis=1)/len(benchmark_values[1])
-            i += 1
+def get_noisy_experiments(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier):
+    lst = [0]*len(sigma)
+    for i in range(len(sigma)):
+        dct = {}
+        dct['sigma'] = sigma[i]
+        dct['rot_angle'] = rot_angle
+        dct['trans_scaling'] = trans_scaling
+        dct['n_iters'] = niters
+        dct['n_outliers'] = n_outliers
+        dct['max_dist_outlier'] = max_dist_outlier
+        lst[i] = dct
 
-        x_axis = noutliers
+    return lst
 
-    else:
-        maxoutliers = np.arange(0,2,0.05)
-        benchmark_angle_worst_array = np.zeros([len(maxoutliers),len(algorithms)])
-        benchmark_pos_worst_array = np.zeros([len(maxoutliers),len(algorithms)])
+def get_single_experiment(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier):
+    dct = {}
+    dct['sigma'] = sigma
+    dct['rot_angle'] = rot_angle
+    dct['trans_scaling'] = trans_scaling
+    dct['n_iters'] = niters
+    dct['n_outliers'] = n_outliers
+    dct['max_dist_outlier'] = max_dist_outlier
 
-        benchmark_angle_best_array = np.zeros([len(maxoutliers),len(algorithms)])
-        benchmark_pos_best_array = np.zeros([len(maxoutliers),len(algorithms)])
+    return [dct]
 
-        benchmark_angle_mean_array = np.zeros([len(maxoutliers),len(algorithms)])
-        benchmark_pos_mean_array = np.zeros([len(maxoutliers),len(algorithms)])
+def plot_experiments(bench_rot,bench_pos,x_axis):
+    bench_rot_worst,bench_rot_best,bench_rot_mean = bench_rot
+    bench_pos_worst,bench_pos_best,bench_pos_mean = bench_pos
 
-        noutlier = 1 # Only a single outlier
-        i = 0
-        for maxoutlier in maxoutliers:
-            T,R = gen_pseudordn_rbm(100,10)
-            print("Max dist outlier:",maxoutlier)
-            benchmark_values = benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutlier,maxoutlier)
-            
-            benchmark_angle_worst_array[i] =  benchmark_values[0].max(axis=1)
-            benchmark_angle_best_array[i] =  benchmark_values[0].min(axis=1)
-            benchmark_angle_mean_array[i] =  benchmark_values[0].sum(axis=1)/len(benchmark_values[0])
+    # plt.style.use('dark_background')
+    fig, (ax1,ax2) = plt.subplots(1, 2)
 
-            benchmark_pos_worst_array[i] =  benchmark_values[1].max(axis=1)
-            benchmark_pos_best_array[i] =  benchmark_values[1].min(axis=1)
-            benchmark_pos_mean_array[i] =  benchmark_values[1].sum(axis=1)/len(benchmark_values[1])
-            i += 1
-
-        x_axis = maxoutliers
-
-
-    plt.style.use('dark_background')
-    fig, (ax1,ax2) = plt.subplots(1, 2) 
-    ax1.plot(x_axis,benchmark_angle_worst_array)
+    ax1.plot(x_axis,bench_rot_worst)
     for i in range(len(ax1.lines)):
-        ax1.lines[i].set_label(alg_name[i])
+        ax1.lines[i].set_label(get_algorithm_name(algorithms[i]))
     ax1.legend()
     ax1.set_title("Angle Error (Worst)")
 
-    ax2.plot(x_axis,benchmark_pos_worst_array)
+    ax2.plot(x_axis,bench_rot_best)
     for i in range(len(ax2.lines)):
-        ax2.lines[i].set_label(alg_name[i])
+        ax2.lines[i].set_label(get_algorithm_name(algorithms[i]))
     ax2.legend()
-    ax2.set_title("Position Error (Worst)")
+    ax2.set_title("Angle Error (Best)")
     
 
     fig, (ax1,ax2) = plt.subplots(1, 2) 
-    ax1.plot(x_axis,benchmark_angle_best_array)
+    ax1.plot(x_axis,bench_pos_worst)
     for i in range(len(ax1.lines)):
-        ax1.lines[i].set_label(alg_name[i])
+        ax1.lines[i].set_label(get_algorithm_name(algorithms[i]))
     ax1.legend()
-    ax1.set_title("Angle Error (Best)")
+    ax1.set_title("Position Error (Worst)")
 
-    ax2.plot(x_axis,benchmark_pos_best_array)
+    ax2.plot(x_axis,bench_pos_best)
     for i in range(len(ax2.lines)):
-        ax2.lines[i].set_label(alg_name[i])
+        ax2.lines[i].set_label(get_algorithm_name(algorithms[i]))
     ax2.legend()
     ax2.set_title("Position Error (Best)")
     plt.show()
 
 
+if __name__ == '__main__':
+    pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
+    pts = np.asarray(pcd.points)
 
-'''
-Algorithms:
-    - Rotation estimation with eigenvalues of 
-    F(X) = sum_i (x_i-x_bar)X(x_i-x_bar)
-    G(X) = sum_i (y_i-y_bar)X(y_i-y_bar)
-
-    - Rotations estimation with eigenvalues of
-    F(X) = sum_i up(x_i-x_bar)X up(x_i-x_bar)
-    G(X) = sum_i up(y_i-y_bar)X up(y_i-y_bar)
-
-    where up(.) converts the elements to CGA.
+    trans_scaling = 0
+    niters = 10
+    # algorithms = algorithms_list
+    # algorithms = ROT_algs_list
+    algorithms = [estimate_rotation_1,estimate_rotation_6,estimate_transformation_8]
 
 
-    - Algorithm 5 can estimate the rotation with only three points. 
-      Two are not enough for the algorithm to converge to the solution.
+    '''
+    Usage of get experiments functions:
+        exps = get_exp(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier)
+    '''
+
+    # Create dictionary for increasing number of outliers
+    noutliers = np.arange(0,51,1)
+    experiments = get_outliers_experiments(noutliers,0,100,trans_scaling,niters,0.1)
+    x_axis = noutliers
+
+    # Create dictionary for increasing the distance of an outlier
+    max_dist_outlier = np.arange(0.0001,3,0.05)
+    experiments = get_max_dist_outliers_experiments(5,0,100,trans_scaling,niters,max_dist_outlier)
+    x_axis = max_dist_outlier
     
-    - Solving the problem using only two sets of points and determining the optimal 
+    # Create dictionary for increasing the noise of the point clouds
+    sigmas = np.arange(0.000,0.051,0.002)
+    experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0.1)
+    x_axis = sigmas
 
-'''
+    # Create dictionary for two experiments
+    # sigmas = np.zeros(30)
+    # x_axis = sigmas
+    # experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0.1)
+    # experiments = get_single_experiment(0,0,100,0,niters,0) + get_single_experiment(0,0.01,100,0,niters,0)
+    # x_axis = np.arange(len(sigmas))
 
+    bench_rot,bench_pos = run_experiments(pts,experiments,algorithms)
 
-'''
-To write code that is independent of the quantities being change need to define:
- - Experiment srtucture:
-    - Each field of this structure would have:
-        - Number of outliers
-        - The maximum distance of an outlier
-        - The added gaussian noise
-        - Or more...
-    for noutlier,maxoutlier,sigma in experiments:
-        benchmark_values = benchmark_with_outliers(pts,R,T,sigma,algorithms,niters,noutlier,maxoutlier)
-
-The question is how would I visualize the data if more than one field varies in the loop? 
-Experiment 'i' in the x axis????
-
-'''
+    plot_experiments(bench_rot,bench_pos,x_axis)

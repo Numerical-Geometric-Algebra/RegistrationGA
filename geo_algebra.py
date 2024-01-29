@@ -409,6 +409,18 @@ def rotmatrix_to_rotor(rot_matrix):
 
     return the_other_rotor_sqrt(rotor)
 
+def the_other_rotmatrix_to_rotor(rot_matrix):
+    eigenvalues, eigenvectors = np.linalg.eig((rot_matrix + rot_matrix.T)/2)
+
+    # The eigenvector with eigenvalue of smallest magnitude 
+    u = np.real(eigenvectors[:,np.argmin(abs(eigenvalues))])
+    v = rot_matrix@u
+    u = vga.multivector(list(u),grades=1) # Convert to VGA
+    v = vga.multivector(list(v),grades=1) # Convert to VGA
+
+    rotor = normalize_mv(u)*normalize_mv(v)
+
+    return ~the_other_rotor_sqrt(rotor)
 
 def estimate_rot_SVD(p,q):
     matrix = np.zeros([3,3])
