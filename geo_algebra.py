@@ -323,6 +323,20 @@ def estimate_translation(R,P,Q):
     T_est = 1 + (1/2)*einf*t_est
     return T_est
 
+# From a estimated rotation estimate the translation
+def estimate_translation_2(R,P,Q):
+
+    A,B,C,D = get_coeffs(P)
+    E,F,G,H = get_coeffs(Q)
+    
+    v = ((A + E)*~(G+H-C-D))(1).sum()
+    s = ((A*~A)(0) + (E*~E)(0)).sum()
+
+    t_est = v/s
+    T_est = 1 + (1/2)*einf*t_est
+    return T_est
+
+
 # Estimate the rigid body motion using the eigendecomposition function
 def estimate_rbm(P,Q):
     basis,rec_basis = get_vga_rotor_basis()

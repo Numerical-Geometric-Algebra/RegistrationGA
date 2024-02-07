@@ -27,13 +27,14 @@ def get_orient_diff_2(P,Q,p,q):
     sign_Q = ((Q_ref|Q)*(Q_ref|Q)*(Q_ref|Q)).sum()(0)
     return sign_P*sign_Q
 
-eig_grades = [1,2]
+
 def estimate_transformation_0(x,y,npoints):
     '''CGA RBM Null Reflection
         Estimates the rigid body motion between two point clouds using the eigenmultivector.
         From the eigenmultivectors we estimate the rotation and translation. 
         To estimate the sign we use references from the PCs themselves.
     '''
+    eig_grades = [1,2]
     # Convert to CGA
     p = eo + x + (1/2)*mag_sq(x)*einf
     q = eo + y + (1/2)*mag_sq(y)*einf
@@ -306,6 +307,11 @@ def estimate_transformation_8(x,y,npoints):
     basis = [eo,e1,e2,e3,einf]
     rec_basis = [-einf,e1,e2,e3,-eo]
 
+    # # Verify that H is in fact magnitude preserving
+    # for i in range(len(basis)):
+    #     print(mag_sq(H_diff(basis[i])))
+    # print()
+
     H_matrix = get_matrix(H_diff,basis,rec_basis).T
 
     t_vec = H_matrix[1:4,0]
@@ -315,6 +321,80 @@ def estimate_transformation_8(x,y,npoints):
     t_est = nparray_to_vga_vecarray(t_vec)
 
     T_est = 1 + (1/2)*einf*t_est
+
+    return (T_est,R_est,P_lst,P_lst)
+
+def estimate_transformation_9(x,y,npoints):
+    '''CGA test eig-values
+        sometimes the eigen-decomposition of H_plus is not correct. 
+        I verified if the eigenvector satisfy the eigenvalue equation, which is 
+        not allways satisfied. After some experimentation with various levels of noise 
+        the above problem does not seem to occur as often as I thought it would.
+        This function takes the eigenvectors P and Q of F and G respectively 
+        and computes the eigendecomposition of the 
+        transformation H(x) = sum_i (x|P_i)*inv(Q_i)
+        The main idea is that because of noise H is going to be a general orthogonal transformation in A(p,q)
+        Then by taking the spectral decomposition I was wondering If I can extract the rotation and translation
+        from H.
+    '''
+    p = eo + x + (1/2)*mag_sq(x)*einf
+    q = eo + y + (1/2)*mag_sq(y)*einf
+
+    P_lst,lambda_P = get_eigmvs(p,grades=1)
+    Q_lst,lambda_Q = get_eigmvs(q,grades=1)
+
+    H_diff,H_adj = get_H_funcs(P_lst,Q_lst)
+
+    basis,rec_basis = get_cga_basis([1])
+    H_plus = lambda X: (H_diff(X) + H_adj(X))/2
+
+    V,lambda_V  = eigen_decomp(H_plus,basis,rec_basis)
+    # check_eigenvalues(H_plus,V,lambda_V)
+    
+    print(lambda_V)
+    # Verify if the 'complex' eigenvalues of H_diff are unitary
+    # print()
+    values = []
+    for i in range(len(V)):
+        lambda_i = H_diff(V[i])*V[i]
+        # print(lambda_i)
+        # print()
+        values += [(lambda_i*~lambda_i)(0)]
+    arr = np.array(values)
+    # print()
+    # print("Unitary Eigenvalues",abs(abs(arr) - 1).max())
+    # print("Test eigmvs:")
+
+    
+    # Verify that H is in fact magnitude preserving
+    values = []
+    for i in range(len(basis)):
+        values += [mag_sq(H_diff(basis[i]))]
+    arr = abs(abs(np.array(values)) - 1)
+    # print("Unitary Transformation",arr.max())
+    
+    Versor = 1
+    sign = 1
+    Versor *= the_other_rotor_sqrt(H_diff(V[0])*inv(V[0]))
+    # Versor *= the_other_rotor_sqrt(H_diff(V[2])*inv(V[2]))
+    Versor *= the_other_rotor_sqrt(H_diff(V[4])*inv(V[4]))
+    if lambda_V[2] < -0.9:
+        Versor *= V[2]
+        sign = -1
+
+    U = Versor
+    values = []
+    for i in range(len(basis)):
+        values += [((sign*U*basis[i]*~U)(1) - H_diff(basis[i])).tolist(1)[0]]
+    arr = abs(np.array(values))
+    # print("Max diff Versor:", arr.max())
+    T_est,R_est = best_motor_estimation(U)
+    # R_est = normalize_mv(P_I(U))
+    # t_est = -2*P_I(((eo|U)*~R_est)(1))
+    # print(R_est)
+    # R_est = 1 + 0*e12
+    # t_est = 0
+    # T_est = 1 + (1/2)*einf*t_est
 
     return (T_est,R_est,P_lst,P_lst)
 

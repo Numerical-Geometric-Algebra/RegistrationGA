@@ -150,11 +150,12 @@ if __name__ == '__main__':
     pts = np.asarray(pcd.points)
 
     trans_scaling = 0
-    niters = 10
+    niters = 1
     # algorithms = algorithms_list
     # algorithms = ROT_algs_list
-    algorithms = [estimate_rotation_1,estimate_rotation_6,estimate_transformation_8]
-
+    # estimate_rotation_6
+    # algorithms = [estimate_rotation_1,estimate_transformation_8,estimate_transformation_0,estimate_transformation_9]
+    algorithms = [estimate_transformation_9]
 
     '''
     Usage of get experiments functions:
@@ -176,12 +177,13 @@ if __name__ == '__main__':
     experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0.1)
     x_axis = sigmas
 
-    # Create dictionary for two experiments
-    # sigmas = np.zeros(30)
-    # x_axis = sigmas
-    # experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0.1)
-    # experiments = get_single_experiment(0,0,100,0,niters,0) + get_single_experiment(0,0.01,100,0,niters,0)
+    # Dummy experiments
+    # sigmas = np.zeros(10)
     # x_axis = np.arange(len(sigmas))
+    # experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0)
+    # experiments = get_single_experiment(0,0,100,0,niters,0) + get_single_experiment(0,0.05,100,0,niters,0)
+    # experiments = get_single_experiment(0,0,100,0,niters,0)
+    # x_axis = [0,1]
 
     bench_rot,bench_pos = run_experiments(pts,experiments,algorithms)
 

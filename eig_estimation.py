@@ -14,9 +14,6 @@ def orient_multivectors(X,A):
     scalar = mv.sign((X*A)(0))
     return X*scalar
 
-def get_orient_array(X,X_ref):
-    return mv.sign((X*X_ref)(0))
-
 def get_func(X):
     def F(Y):
         return (X*Y*X).sum()
@@ -66,13 +63,23 @@ def gen_pseudordn_rbm(angle,mag):
     T = 1 + (1/2)*einf*t
     return (T,R)
 
+def check_eigenvalues(F,V,lambda_V):
+    values = []
+    for i in range(len(V)):
+        values += [(F(V[i]) - lambda_V[i]*V[i]).tolist(1)[0]]
+    arr = np.array(values)
+    # print(arr)
+    print("Eigen Relation: Worst Value:",abs(arr).max())
+
 def get_eigmvs(p,grades=[1,2]):
     '''Computes the eigenmultivectors for the conformal geometric algebra.
         The Function for which the eigenmultvectors are computed is F(X) = sum_i p[i]*X*p[i].
     '''
     basis,rec_basis = get_cga_basis(grades)
-    P_lst,lambda_P = eigen_decomp(get_func(p),basis,rec_basis)
+    F = get_func(p)
+    P_lst,lambda_P = eigen_decomp(F,basis,rec_basis)
 
+    
     # If the scalar product with the point at infinity is zero then the sign of that zero is used
     for i in range(len(P_lst)):
         P_lst[i] = P_lst[i]*math.copysign(1,(P_lst[i]*einf)(0))
@@ -85,6 +92,9 @@ def get_reference(p):
     p_ref = (p*p_bar*p).sum()
     P_ref = (p_bar^p_ref) + p_bar
     return P_ref
+
+def get_orient_array(X,X_ref):
+    return mv.sign((X*X_ref)(0))
 
 def get_orient_diff(P,Q,p,q):
     P_ref = get_reference(p)
@@ -192,6 +202,25 @@ def copy_lst(P_lst):
         P_copy[i] = 1*P_lst[i]
     return P_copy
 
+def best_motor_estimation(V):
+    M1 = P_I(V)
+    M2 = -P_I(eo|V)
+    M = M1 + einf*M2
+    
+    W = M*~(I*M2) + I*M2*~M
+    v = ((I*(eo|W))(0))
+    s = ((I*(eo|(M*~M)))(0))/v
+    
+    Ue = M - s*I*M2
+
+    print(Ue*~Ue)
+    print(M*~M)
+
+    Re = P_I(Ue)
+    Te = 1 - (1/2)*einf*((eo|Ue)*~Re)(1)
+    
+    return Te,Re
+
 def brute_force_estimate_CGA(P_lst,Q_lst):
     n = 3
     sign_list = get_binary_list(n)
@@ -238,6 +267,7 @@ def brute_force_estimate_CGA(P_lst,Q_lst):
 def get_metrics(R,R_est,T,T_est):
     t = -eo|T*2
     t_est = -eo|T_est*2
+    R_est = normalize_mv(R_est)
     costheta = (R_est*~R)(0)
     if abs(costheta) > 1:
         costheta = 1
