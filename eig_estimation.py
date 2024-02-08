@@ -69,7 +69,8 @@ def check_eigenvalues(F,V,lambda_V):
         values += [(F(V[i]) - lambda_V[i]*V[i]).tolist(1)[0]]
     arr = np.array(values)
     # print(arr)
-    print("Eigen Relation: Worst Value:",abs(arr).max())
+    return abs(arr).max()
+    # print("Eigen Relation: Worst Value:",)
 
 def get_eigmvs(p,grades=[1,2]):
     '''Computes the eigenmultivectors for the conformal geometric algebra.
@@ -202,20 +203,142 @@ def copy_lst(P_lst):
         P_copy[i] = 1*P_lst[i]
     return P_copy
 
+def get_H_funcs(A,B):
+    def H_diff(x):
+        out = 0
+        for i in range(len(A)):
+            out += (x*A[i])(0)*inv(B[i])
+        return out
+
+    def H_adj(x):
+        out = 0
+        for i in range(len(B)):
+            out += (x*inv(B[i]))(0)*A[i]
+        return out
+
+    return H_diff,H_adj
+
+def eigen_decomp_H_plus(H_plus):
+
+    basis,rec_basis = get_cga_basis([1])
+    # H_plus = lambda X: (H_diff(X) + H_adj(X))/2
+
+    V,lambda_V  = eigen_decomp(H_plus,basis,rec_basis)
+    return V,lambda_V
+
+def check_compare_funcs(F,G):
+    basis,_ = get_cga_basis([1])
+    values = []
+    for i in range(len(basis)):
+        values += [(F(basis[i])(1) - G(basis[i])(1)).tolist(1)[0]]
+    arr = abs(np.array(values))
+    return arr.max()
+
+def numpy_max(X):
+    '''Converts to numpy and then computes the max'''
+    arr = np.array(X.tolist()[0])
+    return abs(arr).max()
+
+def compute_eigvalues_from_H_plus(V,H):
+    eigvalues = []
+    for i in range(len(V)):
+        eigvalues += [H(V[i])*inv(V[i])]
+    def H_check(X):
+        out = 0
+        for i in range(len(V)):
+            out += eigvalues[i]*(X|V[i])*inv(V[i])
+        return out
+    return H_check,eigvalues
+
+
+def compute_ortho_matrix(a):
+    matrix = np.zeros([len(a),len(a)])
+    for i in range(len(a)):
+        for j in range(len(a)):
+            matrix[i][j] = (a[i]|a[j])(0)
+
+    matrix[matrix < 0.00001] = 0
+    return matrix
+
+def compute_versor_decomp_CGA(H_diff,H_adj):
+    '''Computes the versor of an orthogonal transformation H
+    which does not include parabolic rotations
+    each simple reflection contributes with a minus sign
+    each reflection which squares to -1 contribute with a minus sign
+    H(x) = (-1)**k*U*x*inv(U) where U is a k-versor.
+    
+    The eigenvectors of H_plus might not be orthogonal when the eigenvalue is either one or minus one.
+    When the eigenvectors of H_plus are either one or minus one we take the 
+    wedge product in this way guaranteeng that the non-orthogonal eigenvectors create a blade 
+    instead of a rotor.
+
+    In some cases the a's are repeated!!!! In this situation do not take the wedge product.
+    We only take the wedge product when the vector is linear independent
+    Note that when the eigenvalue is dfferent from plus or minus one
+    then the real part of the eigevalues of H must be distinct.
+    '''
+
+    basis,rec_basis = get_cga_basis([1])
+
+    H_plus = lambda X: (H_diff(X) + H_adj(X))/2
+    a,lambda_plus  = eigen_decomp(H_plus,basis,rec_basis)
+
+    # Put the ones or minus ones as the first elements  
+    indices = np.argsort(abs(abs(lambda_plus) - 1))
+    lambda_plus = lambda_plus[indices]
+    a = [a[i] for i in indices]
+
+    sign = 1
+    U = 1 + 0*e12
+    i = 0
+
+    # Find reflections
+    while abs(abs(lambda_plus[i]) - 1) < 0.0001:
+        # While eigenvalue is equal to one or minus one
+        if lambda_plus[i] < -0.9:    
+            # Take the wedge product because the a's might not be unique
+            U_test = U^a[i]
+        
+            # Check if U_test is non-zero
+            if numpy_max(U_test) > 0.000001:
+                # Only take the wedge product when the a[i] is linearly independent
+                U = U_test
+            sign *= -1
+        i += 1
+        if i >= len(a):
+            break 
+
+    # Find rotations
+    while i < len(a):
+        U *= the_other_rotor_sqrt(H_diff(a[i])*inv(a[i]))
+        i += 2
+
+    # print(U)
+    # print(numpy_max(U*~U))
+    U = normalize_mv(U)
+
+    # print("Lambda:",lambda_plus)
+    # print("a:",compute_ortho_matrix(a))
+    return U,sign*(U*~U)(0)
+
+
+# def compute_decomp_H(H_diff,H_adj):
+#     H_plus = lambda X: (H_diff(X) + H_adj(X))/2
+#     a,lambda_plus  = eigen_decomp(H_plus,basis,rec_basis)
+
+
+
 def best_motor_estimation(V):
     M1 = P_I(V)
     M2 = -P_I(eo|V)
     M = M1 + einf*M2
     
     W = M*~(I*M2) + I*M2*~M
-    v = ((I*(eo|W))(0))
-    s = ((I*(eo|(M*~M)))(0))/v
+    v = (I*(eo|W))(0)
+    u = (I*(eo|(M*~M)))(0)
+    s = u/v
     
     Ue = M - s*I*M2
-
-    print(Ue*~Ue)
-    print(M*~M)
-
     Re = P_I(Ue)
     Te = 1 - (1/2)*einf*((eo|Ue)*~Re)(1)
     

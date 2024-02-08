@@ -271,20 +271,7 @@ def estimate_transformation_6(x,y,npoints):
 
     return (T_est,R_est,P_lst1,P_lst2)
 
-def get_H_funcs(A,B):
-    def H_diff(x):
-        out = 0
-        for i in range(len(A)):
-            out += (x*A[i])(0)*inv(B[i])
-        return out
 
-    def H_adj(x):
-        out = 0
-        for i in range(len(B)):
-            out += (x*inv(B[i]))(0)*A[i]
-        return out
-
-    return H_diff,H_adj
 
 
 def estimate_transformation_8(x,y,npoints):
@@ -349,9 +336,9 @@ def estimate_transformation_9(x,y,npoints):
     H_plus = lambda X: (H_diff(X) + H_adj(X))/2
 
     V,lambda_V  = eigen_decomp(H_plus,basis,rec_basis)
-    # check_eigenvalues(H_plus,V,lambda_V)
+    check_eigenvalues(H_plus,V,lambda_V)
     
-    print(lambda_V)
+    print("lambda:",lambda_V)
     # Verify if the 'complex' eigenvalues of H_diff are unitary
     # print()
     values = []
@@ -365,7 +352,23 @@ def estimate_transformation_9(x,y,npoints):
     # print("Unitary Eigenvalues",abs(abs(arr) - 1).max())
     # print("Test eigmvs:")
 
-    
+    eigvalues = []
+    for i in range(len(V)):
+        eigvalues += [H_diff(V[i])*inv(V[i])]
+
+    def H_check(X):
+        out = 0
+        for i in range(len(V)):
+            out += eigvalues[i]*(x|V[i])*inv(V[i])
+        return out
+
+    # Check if H_check is equal to H
+    values = []
+    for i in range(len(basis)):
+        values += [(H_check(basis[i])(1) - H_diff(basis[i])(1)).tolist(1)[0]]
+    arr = abs(np.array(values))
+    print("Max complex eigenvalue Error:", arr.max())
+
     # Verify that H is in fact magnitude preserving
     values = []
     for i in range(len(basis)):
@@ -383,11 +386,13 @@ def estimate_transformation_9(x,y,npoints):
         sign = -1
 
     U = Versor
+
+    # Check if U is the versor of H
     values = []
     for i in range(len(basis)):
         values += [((sign*U*basis[i]*~U)(1) - H_diff(basis[i])).tolist(1)[0]]
     arr = abs(np.array(values))
-    # print("Max diff Versor:", arr.max())
+    print("Max diff Versor:", arr.max())
     T_est,R_est = best_motor_estimation(U)
     # R_est = normalize_mv(P_I(U))
     # t_est = -2*P_I(((eo|U)*~R_est)(1))

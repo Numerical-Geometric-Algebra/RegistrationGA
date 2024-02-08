@@ -149,8 +149,8 @@ if __name__ == '__main__':
     pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
     pts = np.asarray(pcd.points)
 
-    trans_scaling = 0
-    niters = 1
+    trans_scaling = 10
+    niters = 10
     # algorithms = algorithms_list
     # algorithms = ROT_algs_list
     # estimate_rotation_6
@@ -178,9 +178,9 @@ if __name__ == '__main__':
     x_axis = sigmas
 
     # Dummy experiments
-    # sigmas = np.zeros(10)
-    # x_axis = np.arange(len(sigmas))
-    # experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0)
+    sigmas = np.zeros(10)
+    x_axis = np.arange(len(sigmas))
+    experiments = get_noisy_experiments(0,sigmas,100,trans_scaling,niters,0)
     # experiments = get_single_experiment(0,0,100,0,niters,0) + get_single_experiment(0,0.05,100,0,niters,0)
     # experiments = get_single_experiment(0,0,100,0,niters,0)
     # x_axis = [0,1]
