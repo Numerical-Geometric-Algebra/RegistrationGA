@@ -197,6 +197,10 @@ def pos_dist_sq(X,Y):
     A,B,C,D = get_coeffs(X-Y)
     return mag_sq(A) +  mag_sq(B) + mag_sq(C) + mag_sq(D)
 
+def plus_norm_sq(X):
+    A,B,C,D = get_coeffs(X)
+    return mag_sq(A) +  mag_sq(B) + mag_sq(C) + mag_sq(D)
+
 def proj(B,X):
     return (X|B)*inv(B)
 
@@ -206,16 +210,17 @@ def proj_perp(B,X):
 # Normalizes all types of multivectors
 # Ignores almost null multivectors
 # Only works for Multivectors with only a single element
-eps = 1E-10
+eps = 0.001
 def normalize_null(X):
     magnitude = np.sqrt(abs((X*~X)(0)))
-    scalar = 1
-    if magnitude < eps:
-        if abs(pos_cga_dist(X,X) - magnitude) < eps/2:
-            scalar = 1/magnitude
+    if(magnitude == 0.0):
+        return X
+
+    relative_mag = abs(magnitude/np.sqrt(plus_norm_sq(X)))
+    if relative_mag < eps:
+        return X
     else: 
-        scalar = 1/magnitude
-    return X*scalar
+        return X/magnitude
 
 
 def vga_to_cga(x):
@@ -276,13 +281,7 @@ def get_func_from_matrix(beta,basis,rec_basis):
         return out
     return F
 
-
-def eigen_decomp(F,basis,rec_basis):
-    # Solves the eigendecomposition of a multilinear transformation F
-    beta = get_matrix(F,basis,rec_basis)
-
-    eigenvalues, eigenvectors = np.linalg.eig(beta.T)
-
+def convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis):
     Y = [0]*len(eigenvalues)
     # Convert the eigenvectors to eigenmultivectors
     for i in range(len(eigenvalues)):
@@ -295,8 +294,17 @@ def eigen_decomp(F,basis,rec_basis):
     Y_ordered = [Y[i] for i in indices]
     eigenvalues_ordered = eigenvalues[indices]
     for i in range(len(Y_ordered)):
-        Y_ordered[i] = normalize_mv(Y_ordered[i])
+        Y_ordered[i] = Y_ordered[i]
+        # Y_ordered[i] = normalize_mv(Y_ordered[i])
+        # Y_ordered[i] = normalize_null(Y_ordered[i])
     return Y_ordered,np.real(eigenvalues_ordered)
+
+def eigen_decomp(F,basis,rec_basis):
+    # Solves the eigendecomposition of a multilinear transformation F
+    beta = get_matrix(F,basis,rec_basis)
+    eigenvalues, eigenvectors = np.linalg.eig(beta.T)
+
+    return convert_numpyeigvecs_to_eigmvs(eigenvalues,eigenvectors,basis,rec_basis)
 
 def translation_from_cofm(y,x,R_est,n_points):
     # Estimate the translation using the center of mass
@@ -376,7 +384,17 @@ def estimate_rot_VGA(X,Y):
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
     return R_est
 
+def check_compare_funcs(F,G,basis):
+    values = []
+    for i in range(len(basis)):
+        values += [(F(basis[i])(1) - G(basis[i])(1)).tolist(1)[0]]
+    arr = abs(np.array(values))
+    return arr.max()
 
+def numpy_max(X):
+    '''Converts to numpy and then computes the max'''
+    arr = np.array(X.tolist()[0])
+    return abs(arr).max()
 
 def rotor_sqrt_mv(R):
     if(R(0) > 1):

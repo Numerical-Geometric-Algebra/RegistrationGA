@@ -260,13 +260,37 @@ def compute_ortho_matrix(a):
     matrix[matrix < 0.00001] = 0
     return matrix
 
+
+def compute_smth(H_diff,H_adj):
+    basis,rec_basis = get_cga_basis([1])
+    B = 0
+    # compute the bivector B = d^H of H (d is the derivative operator)
+    for i in range(len(basis)):
+        B += (basis[i]^H_diff(rec_basis[i]))(2)
+
+    print(B)
+
+    def F(x):
+        return (x|B)(1)
+
+    F_matrix = get_matrix(F,basis,rec_basis)
+
+    print(F_matrix + F_matrix.T)
+
+    G_matrix = np.matmul(F_matrix.T,F_matrix)
+
+    eigenvalues, eigenvectors = np.linalg.eig(G_matrix.T)
+    a,lambda_a = convert_numpyeigvecs_to_eigmvs(eigenvalues,eigenvectors,basis,rec_basis)
+    return a,lambda_a,B
+
+
 def compute_versor_decomp_CGA(H_diff,H_adj):
     '''Computes the versor of an orthogonal transformation H
     which does not include parabolic rotations
     each simple reflection contributes with a minus sign
     each reflection which squares to -1 contribute with a minus sign
-    H(x) = (-1)**k*U*x*inv(U) where U is a k-versor.
-    
+    H(x) = (-1)**k*U*x*inv(U) where U is a k-versor.'''
+    '''
     The eigenvectors of H_plus might not be orthogonal when the eigenvalue is either one or minus one.
     When the eigenvectors of H_plus are either one or minus one we take the 
     wedge product in this way guaranteeng that the non-orthogonal eigenvectors create a blade 
@@ -276,6 +300,10 @@ def compute_versor_decomp_CGA(H_diff,H_adj):
     We only take the wedge product when the vector is linear independent
     Note that when the eigenvalue is dfferent from plus or minus one
     then the real part of the eigevalues of H must be distinct.
+    In the case of CGA the versor is not unique we can always multiply V by rho = alpha + beta*I, 
+    with rho**2 = 1 or rho**2 = -1, rho commutes with all multivector elements. 
+    
+    Sometimes it does not work yet if I disturb H a little then somehow the solution is slightly different.
     '''
 
     basis,rec_basis = get_cga_basis([1])
@@ -303,7 +331,7 @@ def compute_versor_decomp_CGA(H_diff,H_adj):
             if numpy_max(U_test) > 0.000001:
                 # Only take the wedge product when the a[i] is linearly independent
                 U = U_test
-            sign *= -1
+                sign *= -1
         i += 1
         if i >= len(a):
             break 
@@ -316,6 +344,7 @@ def compute_versor_decomp_CGA(H_diff,H_adj):
     # print(U)
     # print(numpy_max(U*~U))
     U = normalize_mv(U)
+    # print(numpy_max(U))
 
     # print("Lambda:",lambda_plus)
     # print("a:",compute_ortho_matrix(a))
