@@ -1,4 +1,4 @@
-from eig_estimation import *
+from cga3d_estimation import *
 import open3d as o3d
 import matplotlib.pyplot as plt
 from algorithms import *
@@ -11,7 +11,7 @@ def benchmark(pts,sigma,algorithms,rotangle,tscaling,niters,noutliners,maxoutlie
     plane_error = np.zeros([nalgorithms,niters])
     
     for i in range(niters):
-        T,R = gen_pseudordn_rbm(rotangle,tscaling)
+        T,R = gen_pseudordn_rigtr(rotangle,tscaling)
         t = -eo|T*2 # get the translation vector
 
         # Add random outliers
@@ -19,13 +19,13 @@ def benchmark(pts,sigma,algorithms,rotangle,tscaling,niters,noutliners,maxoutlie
         pts_with_outliers = np.r_[outliers,pts]
         npoints = pts.shape[0]
         
-        x = nparray_to_vga_vecarray(pts)
-        noise = rdn_gaussian_vga_vecarray(0,sigma,npoints)
+        x = nparray_to_3dvga_vector_array(pts)
+        noise = rdn_gaussian_3dvga_vecarray(0,sigma,npoints)
         y = R*x*~R + t + noise
-        x = nparray_to_vga_vecarray(pts_with_outliers)
+        x = nparray_to_3dvga_vector_array(pts_with_outliers)
         for j in range(nalgorithms):
             T_est,R_est,_,_ = algorithms[j](x,y,npoints)
-            ang_error[j][i],pos_error[j][i],plane_error[j][i] = get_metrics(R,R_est,T,T_est)
+            ang_error[j][i],pos_error[j][i],plane_error[j][i] = get_rigtr_error_metrics(R,R_est,T,T_est)
 
     return ang_error,pos_error,plane_error
 
@@ -149,14 +149,15 @@ if __name__ == '__main__':
     pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
     pts = np.asarray(pcd.points)
 
-    trans_scaling = 10
-    niters = 10
+    trans_scaling = 0
+    niters = 1
     # algorithms = algorithms_list
     # algorithms = ROT_algs_list
     # estimate_rotation_6
     # algorithms = [estimate_rotation_1,estimate_transformation_8,estimate_transformation_0,estimate_transformation_9]
-    algorithms = [estimate_transformation_9]
-
+    # algorithms = [estimate_transformation_9]
+    algorithms = [estimate_transformation_0,estimate_transformation_1,estimate_transformation_2,estimate_transformation_3,estimate_transformation_4,estimate_transformation_5,estimate_transformation_8,estimate_transformation_9]
+    algorithms += [estimate_rotation_0,estimate_rotation_1,estimate_rotation_2,estimate_rotation_3,estimate_rotation_4,estimate_rotation_5,estimate_rotation_6]
     '''
     Usage of get experiments functions:
         exps = get_exp(n_outliers,sigma,rot_angle,trans_scaling,niters,max_dist_outlier)
