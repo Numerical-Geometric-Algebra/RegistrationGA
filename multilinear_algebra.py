@@ -1,5 +1,7 @@
 import numpy as np
 import geo_algebra as pyga
+from gasparsegen import multivector as mv
+
 
 def get_matrix(F,basis,rec_basis):
     F_matrix = np.zeros([len(basis),len(basis)])
@@ -27,6 +29,14 @@ def get_func_from_matrix(F_matrix,basis,rec_basis):
         return out
     return F
 
+def compute_bivector_from_skew(F,basis,rec_basis):
+    ''' Computes the bivector of the skew symmetric part of F'''
+
+    out = 0
+    for i in range(len(basis)):
+        out += basis[i]^F(rec_basis[i])
+    return out
+
 def convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis):
     '''From a set of eigenvectors computes the eigenmultivectors and orders the result by the absolute value of the eigenvalues
     '''
@@ -38,21 +48,60 @@ def convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis):
             Y[i] += u[j]*basis[j]
 
     #Order eigenmultivectors and eigenvalues by the absolute value of the eigenvalues
-    indices = np.argsort(abs(eigenvalues))
+    indices = np.argsort(eigenvalues)
     Y_ordered = [Y[i] for i in indices]
     eigenvalues_ordered = eigenvalues[indices]
     return Y_ordered,np.real(eigenvalues_ordered)
 
+def compute_ortho_matrix_check(a):
+    matrix = np.zeros([len(a),len(a)])
+    for i in range(len(a)):
+        for j in range(len(a)):
+            matrix[i][j] = (a[i]|a[j])(0)
+
+    matrix[abs(matrix) < 0.00001] = 0
+    return matrix
+
+def form_eigenblades_from_eigvectors(a,lambda_a):
+    ''' Takes a set of eigenvectors and forms blades when the multiplicity of the eigenvalues is 
+        greater then one  '''
+    # Join the elements which have multiplicity greater than one
+    B_lst = []
+    lambda_lst = []
+    j = 0
+    while j < len(lambda_a):
+        value = lambda_a[j]
+        B = 1
+        while j < len(lambda_a) and abs(value - lambda_a[j]) < 0.0001:
+            B_test = B^a[j]
+            if pyga.numpy_max(B_test) > 0.0001:
+                B = B_test
+            j += 1
+
+        lambda_lst += [value]
+        B_lst += [B]
+
+    return B_lst,lambda_lst
+
 def symmetric_eigen_decomp(F,basis,rec_basis):
     '''Solves the eigendecomposition of a multilinear symmetric function F'''
     F_matrix = get_matrix(F,basis,rec_basis)
-    eigenvalues, eigenvectors = np.linalg.eig(F_matrix .T)
+    eigenvalues, eigenvectors = np.linalg.eig(F_matrix.T)
     return convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis)
+
+def symmetric_eigen_blades_decomp(F,basis,rec_basis):
+    a,lambda_a = symmetric_eigen_decomp(F,basis,rec_basis)
+    print(lambda_a)
+    for i in range(len(a)):
+        print(a[i])
+    return form_eigenblades_from_eigvectors(a,lambda_a)
 
 def biv_decomp(B,basis,rec_basis):
     '''
     Computes the bivector decomposition from a bivector B. Uses the composition of 
-    a function with its adjoint that is G(x) = (x|B)|~B in the euclidean case.
+    a function with its adjoint that is G(x) = (x|B)|~B.
+    '''
+    '''
     For negative signature: 
         - It might not allways work.
         - Does not allways retrieve a set of orthogonal vectors
@@ -64,24 +113,28 @@ def biv_decomp(B,basis,rec_basis):
     def G(x):
         return ((x|B)|~B)(1)
 
-    G_matrix = get_matrix(G,basis,rec_basis)
-    eigenvalues, eigenvectors = np.linalg.eig(G_matrix.T)
-    a,lambda_a = convert_numpyeigvecs_to_eigmvs(eigenvalues,eigenvectors,basis,rec_basis)
+    a,lambda_a = symmetric_eigen_decomp(G,basis,rec_basis)
 
-    B_lst = [0]*len(a)
-    for i in range(len(a)):
-        B_lst[i] = -(F(a[i])*pyga.inv(a[i]))(2)
+    B_lst = []
+
+    i = 0
+    while i < len(a):
+        Bi = -(F(a[i])*pyga.inv(a[i]))(2)
+        B_lst += [Bi]
+
+        if pyga.check_null_mv(Bi):
+            i += 1
+        else:
+            i += 2
     
     A = 1
     for i in range(len(a)):
         A ^= a[i]
 
-    print("a[1]^...^a[n]=",A)
-
     return B_lst,a
 
 
-def compute_versor_decomp_CGA(H_diff,H_adj,basis,rec_basis):
+def compute_versor_symmetric(H_diff,H_adj,basis,rec_basis):
     '''Computes the versor of an orthogonal transformation H
     which does not include parabolic rotations
     each simple reflection contributes with a minus sign
@@ -100,10 +153,8 @@ def compute_versor_decomp_CGA(H_diff,H_adj,basis,rec_basis):
     In the case of CGA the versor is not unique we can always multiply V by rho = alpha + beta*I, 
     with rho**2 = 1 or rho**2 = -1, rho commutes with all multivector elements. 
     
-    Sometimes it does not work yet if I disturb H a little then somehow the solution is slightly different.
+    Sometimes it does not work yet if I disturb H a little then somehow the solution is very different.
     '''
-
-    # basis,rec_basis = get_cga_basis([1])
 
     H_plus = lambda X: (H_diff(X) + H_adj(X))/2
     a,lambda_plus  = symmetric_eigen_decomp(H_plus,basis,rec_basis)
@@ -115,7 +166,7 @@ def compute_versor_decomp_CGA(H_diff,H_adj,basis,rec_basis):
 
     sign = 1
     ga = basis[0].GA()
-    U = ga.multivector([0],basis=['e'])
+    U = ga.multivector([1.0],basis=['e'])
     i = 0
 
     # Find reflections
@@ -139,16 +190,111 @@ def compute_versor_decomp_CGA(H_diff,H_adj,basis,rec_basis):
         U *= pyga.rotor_sqrt(H_diff(a[i])*pyga.inv(a[i]))
         i += 2
 
-    # print(U)
-    # print(numpy_max(U*~U))
     U = pyga.normalize_mv(U)
-    # print(numpy_max(U))
-
-    # print("Lambda:",lambda_plus)
-    # print("a:",compute_ortho_matrix(a))
     return U,sign*(U*~U)(0)
 
 
+def compute_versor_skew(F,basis,rec_basis):
+    ''' Computes the versor of an orthogonal transformation using the skew symmetric part of F.
+        This decomposition only works for special orthogonal transformations.
+        Since reflections are symmetric they get anhialated when computing the bivector.
+        This algorithm works mostly for 'positive' geometric algebras.  
+    '''
+    '''
+        For reflections it forms a blade A for each linearly indepedent vector that is found A ^= a[i],
+        then it multiplies by the versor.
+        Not allways the eigenvectors of the decomposition form an orthogonal basis for the entire space.
+    '''
+    ga = basis[0].GA()
+    B = compute_bivector_from_skew(F,basis,rec_basis)
+
+    # If it is symmetric, return the identity.
+    if pyga.numpy_max(B) < 0.00001:
+        return ga.multivector([1],basis=['e']) # It must be a multivector
+
+    pss = list(ga.basis(grades=len(ga.metric())).values())[0]
+    # Get the blades and the eigenvectors of x|B
+    def G(x):
+        return ((x|B)|~B)(1)
+
+    a,lambda_G = symmetric_eigen_decomp(G,basis,rec_basis)
+
+    V = 1
+    i = 0
+    A = ga.multivector([1],basis=['e'])
+
+    while i < len(a):
+        if abs(lambda_G[i]) > 1e-10: # Found a vector in F_minus
+            Vi_sq = F(a[i])*pyga.inv(a[i])
+            V *= pyga.rotor_sqrt(Vi_sq)
+            i += 1 # skip next iteration
+        i += 1
+    return V
+
+
+def some_algorithm():
+    # while i < len(a):
+    #     if(pyga.check_null_mv(a[i])):
+    #         i += 1
+    #         print("Null vector")
+    #         continue
+    #     Vi_sq = F(a[i])*pyga.inv(a[i])
+    #     # print("Vi_sq:",Vi_sq)
+    #     # print(Vi_sq)
+    #     # V *= Vi
+
+    #     # if Vi_sq(0) < -0.9999: # Check if it is a reflection
+    #     #     A_temp = A^a[i]
+            
+    #     #     if pyga.numpy_max(A_temp) > 0.00001:
+    #     #         # Check if it is linearly independent
+    #     #         A = A_temp
+    #     #     i += 1
+
+    #     if abs(lambda_G[i]) > 1e-10:
+    #         if pyga.check_null_mv(Vi_sq(2)):
+    #             # Null bivectors only appear one time
+    #             V *= 1 + Vi_sq(2)/2 # The sqrt of a parabolic rotation
+    #         elif Vi_sq(0) > -0.9999: # it is not a reflection
+    #             A ^= Vi_sq(2)
+    #             # print(A)
+    #             print("Vi_sq=",Vi_sq)
+    #             # Non null bivectors appear two times
+    #             V *= pyga.rotor_sqrt(Vi_sq)
+    #             i += 1 # skip next iteration
+    #     i += 1
+    
+
+
+    # Find the space where the rotors apply the rotation
+    # for i in range(len(a)):
+    #     Vi_sq = F(a[i])*pyga.inv(a[i])
+    #     if Vi_sq(0) > -0.9999:
+    #         A_temp = A^a[i]
+    #         if pyga.numpy_max(A_temp) > 0.00001: # Check if it is linearly independent
+    #             A = A_temp
+
+
+    ''' When the a[i]'s do not form a basis for the entire linear space
+        then we must find the other elements
+    '''
+    # B = 1
+    # for i in range(len(a)):
+    #     B_temp = B^a[i]
+    #     if pyga.numpy_max(B_temp) > 0.00001:
+    #         # Check if it is linearly independent
+    #         B = B_temp
+    # # print("B=",B)
+    # if mv.grade(B) == mv.grade(pss)-1:
+    #     a0 = pss*B
+    #     Vi_sq = F(a0)*pyga.inv(a0)
+    #     if Vi_sq(0) < -0.9:
+    #         A ^= a0
+    # # print("A=",A)
+    # V = pyga.normalize_mv(V*A)
+    # sign = (-1)**mv.grade(A)
+    # return V,sign
+    
 def compute_eigvalues_from_eigvecs(V,H):
     eigvalues = []
     for i in range(len(V)):
@@ -160,14 +306,6 @@ def compute_eigvalues_from_eigvecs(V,H):
         return out
     return H_check,eigvalues
 
-def compute_ortho_matrix_check(a):
-    matrix = np.zeros([len(a),len(a)])
-    for i in range(len(a)):
-        for j in range(len(a)):
-            matrix[i][j] = (a[i]|a[j])(0)
-
-    matrix[matrix < 0.00001] = 0
-    return matrix
 
 def check_compare_funcs(F,G,basis):
     values = []

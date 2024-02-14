@@ -4,8 +4,9 @@ import open3d.visualization.gui as gui
 import numpy as np
 import copy
 from scipy.spatial.transform import Rotation
-from eig_estimation import *
-import benchmark
+from cga3d_estimation import *
+import algorithms
+import multilinear_algebra as multiga
 
 import os, pickle
 from pathlib import Path
@@ -106,7 +107,7 @@ def get_point_clouds(cfg,base_dir,item=-1):
     # apply_rbm(tgt_pcd,tgt_rbm)
 
     # R = rotmatrix_to_rotor(rot)
-    # t = nparray_to_vga_vecarray(trans.T[0])
+    # t = nparray_to_3dvga_vector_array(trans.T[0])
     # print(R)
     # print(t)
     
@@ -185,7 +186,7 @@ class PCViewer3D:
         self.camera_pos = [0,0,0]
 
         if self.rdn_rbm:
-            self.T,self.R = gen_pseudordn_rbm(100,1)
+            self.T,self.R = gen_pseudordn_rigtr(100,1)
             self.t = -eo|self.T*2
         else:
             self.theta = 90*np.pi/180
@@ -236,7 +237,7 @@ class PCViewer3D:
 
     def update_rbm(self):
         if self.rdn_rbm:
-            self.T,self.R = gen_pseudordn_rbm(100,1)
+            self.T,self.R = gen_pseudordn_rigtr(100,1)
             self.t = -eo|self.T*2
         else:
             self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
@@ -252,7 +253,7 @@ class PCViewer3D:
         self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
         self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
         
-        self.estimate_rbm()
+        self.estimate_rigtr()
 
         self.update_pc(0)
         # self.update_pc(1)
@@ -432,7 +433,7 @@ class PCViewer3D:
         self.scene.scene.add_geometry('CeOM'+str(i),sphere,material)
 
 
-    def estimate_rbm(self):
+    def estimate_rigtr(self):
         
         if(self.algorithm is None):
             self.algorithm = self.get_default_algorithm()
@@ -441,8 +442,8 @@ class PCViewer3D:
         y_pts = np.asarray(self.noisy_pcd[1].points)
 
         # Convert numpy array to multivector array
-        x = nparray_to_vga_vecarray(x_pts)
-        y = nparray_to_vga_vecarray(y_pts)
+        x = nparray_to_3dvga_vector_array(x_pts)
+        y = nparray_to_3dvga_vector_array(y_pts)
         
         # Use the chosen algorithm to estimate the RBM
         T_est,R_est,P_lst,Q_lst = self.algorithm(x,y,self.n_points)
@@ -453,7 +454,7 @@ class PCViewer3D:
         # q_bar = q.sum()/self.n_points
         # q_bar_est = T_est*R_est*p.sum()*~R_est*~T_est/self.n_points
 
-        # print("Primitives Error:",mag_sq(P_I(Q_est - Q)).sum())
+        # print("Primitives Error:",pyga.mag_sq(P_I(Q_est - Q)).sum())
         # print("Center of Mass of q:",q_bar)
         # print("Center of Mass of q_est:",q_bar_est)
         # print("Center of Mass diff :" , q_bar - q_bar_est)
@@ -466,9 +467,9 @@ class PCViewer3D:
         # y_est = R_est*x*~R_est + t_est
         x_est = ~R_est*(y - t_est)*R_est
         
-        print_metrics(R_est,self.R,T_est,self.T,self.n_points,self.sigma)
+        print_rigtr_error_metrics(R_est,self.R,T_est,self.T,self.n_points,self.sigma)
         
-        x_pts = mvarray_to_nparray(x_est)
+        x_pts = cga3d_vector_array_to_nparray(x_est)
 
         self.pcd[2].points = o3d.utility.Vector3dVector(x_pts)
         self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
@@ -477,12 +478,12 @@ class PCViewer3D:
         def algorithm_0(x,y,npoints):
 
             # Convert to CGA
-            p = eo + x + (1/2)*mag_sq(x)*einf
-            q = eo + y + (1/2)*mag_sq(y)*einf
+            p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+            q = eo + y + (1/2)*pyga.mag_sq(y)*einf
 
             # Get the eigenbivectors
-            P_lst,lambda_P = get_eigmvs(p,grades=self.eig_grades)
-            Q_lst,lambda_Q = get_eigmvs(q,grades=self.eig_grades)
+            P_lst,lambda_P = get_3dcga_eigmvs(p,grades=self.eig_grades)
+            Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=self.eig_grades)
 
             # Transform list of multivectors into an array
             P = mv.concat(P_lst)
@@ -491,7 +492,7 @@ class PCViewer3D:
             # Orient the eigenbivectors by using the points p and q as a reference
             signs = get_orient_diff(P,Q,p,q)
             P = P*signs
-            T_est,R_est = estimate_rbm(P,Q)
+            T_est,R_est = estimate_rigtr(P,Q)
             # T_est = translation_from_cofm(y,x,R_est,self.n_points)
             return (T_est,R_est,P_lst,Q_lst)
         return algorithm_0
@@ -503,12 +504,12 @@ class PCViewer3D:
         x_pts = np.asarray(self.noisy_pcd[j].points)
         
         # Convert numpy array to multivector array
-        x = nparray_to_vga_vecarray(x_pts)
+        x = nparray_to_3dvga_vector_array(x_pts)
 
         # Convert to CGA
-        p = eo + x + (1/2)*mag_sq(x)*einf 
+        p = eo + x + (1/2)*pyga.mag_sq(x)*einf 
 
-        P_lst,lambda_P = get_eigmvs(p,grades=self.eig_grades)
+        P_lst,lambda_P = get_3dcga_eigmvs(p,grades=self.eig_grades)
         self.P_lst[j] = P_lst
         
 
@@ -593,7 +594,7 @@ if __name__ == '__main__':
     color = np.array([[0.5,0,0]]*n_points)
     src_pcd.colors = o3d.utility.Vector3dVector(color)
 
-    viewer = PCViewer3D([tgt_pcd,src_pcd],draw_primitives=[False,False,False],sigma=sigma,rdn_rbm=True,eig_grades=2,compare_primitives=False)
+    viewer = PCViewer3D([tgt_pcd,src_pcd],draw_primitives=[True,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
     # viewer.algorithm = benchmark.estimate_transformation_1
     viewer.update_model()
     viewer.run()

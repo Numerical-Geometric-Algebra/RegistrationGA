@@ -47,10 +47,6 @@ def get_3dvga_basis(grades):
     vga_rec_basis = pyga.reciprocal_blades(vga_basis)
     return (vga_basis,vga_rec_basis)
 
-def nparray_to_3dvga_vector_array(x_array):
-    '''Converts a numpy array to a an array of multivectors of grade one'''
-    return pyga.nparray_to_vecarray(vga3d,x_array)
-
 '''Functions to generate random multivectors'''
 
 
@@ -416,7 +412,7 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
         ang_error = 360 - ang_error
 
     # Compute the magnitude of tranlation error
-    t_error = pyga.mag_mv(t - t_est)
+    t_mag_error = pyga.mag_mv(t - t_est)
 
     # Compute the error between the planes of rotation
     cosphi = (pyga.normalize_mv(R(2))*~pyga.normalize_mv(R_est(2)))(0)
@@ -426,17 +422,17 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
     if(phi > 180):
         phi = 360 - phi
 
-    return ang_error,t_error,phi
+    return ang_error,t_mag_error,phi
 
 def print_rigtr_error_metrics(R,R_est,T,T_est,m_points=-1,sigma=-1):
     if(m_points > 0):
         print("Nbr points:",m_points)
     if(sigma >= 0):
         print("Sigma:", sigma)
-    ang_error,t_error,plane_angle = get_rigtr_error_metrics(R,R_est,T,T_est)
+    ang_error,t_mag_error,plane_angle = get_rigtr_error_metrics(R,R_est,T,T_est)
     print("Angle between planes of rotation:",plane_angle)
     print("Angle Error:",ang_error)
-    print("Translation Error:", pyga.mag_mv(t - t_est))
+    print("Translation Error:", t_mag_error)
 
 # Still need to divide all of these by the length of the array
 def compute_PC_error(t,R,x,y):
@@ -467,6 +463,10 @@ def get_properties(X):
     rho_sq = (scalar*X*grade_involution(X))(0)
     return ((-d|eo).tolist(1)[0][:3],Proj_I(l(1)).tolist(1)[0][:3],rho_sq)
     #return (-d|eo,Proj_I(l),rho_sq)
+
+def nparray_to_3dvga_vector_array(x_array):
+    '''Converts a numpy array to a an array of multivectors of grade one'''
+    return pyga.nparray_to_vecarray(vga3d,x_array)
 
 def cga3d_vector_array_to_nparray(x):
     ''' Takes a multivector and extracts the grade one elements into a list

@@ -1,16 +1,20 @@
 import geo_algebra as pyga
 import numpy as np
-import gasparse
+import gasparsegen
 from gasparse import multivector as mv
 # from ga_decomposition import *
 import multilinear_algebra as multiga
 
-ga = gasparse.GA(4,2)
+np.set_printoptions(linewidth=np.inf)
+
+ga = gasparsegen.GA(4,1)
 basis = ga.basis()
 locals().update(basis)
 
-n_samples = 10
+n_samples = 1
 n_iters = 1
+
+basis,rec_basis = pyga.get_ga_basis_vectors(ga)
 
 def check_ortho_bivs(B_lst):
     matrix = np.zeros([len(B_lst),len(B_lst)])
@@ -19,8 +23,13 @@ def check_ortho_bivs(B_lst):
             matrix[i][j] = (B_lst[i]|B_lst[j])(0)
     return matrix
 
+v = e3+2*e2+5*e1
+B = 5*(e4-e5)*v + e123*v
+# B = 5*(e4-e5)*v
+
+
 for i in range(n_samples):
-    B = pyga.rdn_multivector_array(ga,2,1)
+    # B = pyga.rdn_multivector_array(ga,2,1)
     # B = e12 + e34 + e56
     for j in range(n_iters):
         # B += 0.0001*pyga.rdn_multivector_array(ga,2,1)
@@ -31,8 +40,6 @@ for i in range(n_samples):
         #     return (x|B)(1)
 
         # basis = list(ga.basis(grades=1).values())
-        basis = [e1,e2,e3,e4,e5,e6]
-        rec_basis = [e1,e2,e3,e4,-e5,-e6]
         # F_matrix = pyga.get_matrix(F,basis,basis)
 
         # G_matrix = np.matmul(F_matrix.T,F_matrix)
@@ -41,11 +48,11 @@ for i in range(n_samples):
 
         # B1 = -(F(a[1])*pyga.inv(a[1]))(2)
         # B2 = -(F(a[3])*pyga.inv(a[3]))(2)
-        B_lst,a = multiga.biv_decomp(B,basis,rec_basis)
+        B_lst = multiga.biv_decomp(B,basis,rec_basis)
         B_check = 0
         for i in range(len(B_lst)):
             B_check += B_lst[i]
-        B_check = B_check/2
+    
         # print(lambda_a)
         print("j=",j)
 
