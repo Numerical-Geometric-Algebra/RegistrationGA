@@ -20,6 +20,18 @@ TODO:
 def get_algorithm_name(algorithm):
     return algorithm.__doc__.split("\n")[0]
 
+def compute_references(p,q):
+    p_ref = p.sum()
+    p_ref /= (p_ref|einf)(0)
+
+    q_ref = q.sum()
+    q_ref /= (q_ref|einf)(0)
+
+    P_ref = (1 + ii)*einf^(1+ p_ref)
+    Q_ref = (1 + ii)*einf^(1+ q_ref)
+
+    return P_ref,Q_ref
+
 
 def estimate_transformation_0(x,y,npoints):
     '''CGA RBM Null Reflection
@@ -40,11 +52,78 @@ def estimate_transformation_0(x,y,npoints):
     P = mv.concat(P_lst)
     Q = mv.concat(Q_lst)
 
-    # Orient the eigenbivectors by using the points p and q as a reference
-    signs = get_orient_diff(P,Q,p,q)
-    P = P*signs
+    # Rescale Q to the appropriate scale factor
+    P_ref,Q_ref = compute_references(p,q)
+    Q /= (Q*Q_ref)(0)
+    P /= (P*P_ref)(0)
+    
     T_est,R_est = estimate_rigtr(P,Q)
+
     return (T_est,R_est,P_lst,Q_lst)
+
+def estimate_transformation_12(x,y,npoints):
+    '''CGA RBM signed
+        Estimates the rigid body motion between two point clouds using the eigenmultivector.
+        From the eigenmultivectors we estimate the rotation and translation. 
+        To estimate the sign we use references from the PCs directly.
+    '''
+    eig_grades = [1,2]
+    # Convert to CGA
+    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
+
+    # Get the eigenbivectors
+    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
+    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+
+    # Transform list of multivectors into an array
+    P = mv.concat(P_lst)
+    Q = mv.concat(Q_lst)
+
+    # Rescale Q to the appropriate sign factor
+    P_ref,Q_ref = compute_references(p,q)
+
+    Q *= mv.sign((Q*Q_ref)(0))
+    P *= mv.sign((P*P_ref)(0))
+    
+    T_est,R_est = estimate_rigtr(P,Q)
+
+    return (T_est,R_est,P_lst,Q_lst)
+
+
+def estimate_transformation_13(x,y,npoints):
+    '''CGA RBM signed exact translation
+        Estimates the rigid body motion between two point clouds using the eigenmultivector.
+        From the eigenmultivectors we estimate the rotation and translation. 
+        To estimate the sign we use references from the PCs directly.
+    '''
+    eig_grades = [1,2]
+    # Convert to CGA
+    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
+
+    # Get the eigenbivectors
+    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
+    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+
+    # Transform list of multivectors into an array
+    P = mv.concat(P_lst)
+    Q = mv.concat(Q_lst)
+
+    # Rescale Q to the appropriate sign factor
+    P_ref,Q_ref = compute_references(p,q)
+
+    Q *= mv.sign((Q*Q_ref)(0))
+    P *= mv.sign((P*P_ref)(0))
+    
+    Q_lst[0] *= np.sign((Q_lst[0]*Q_ref)(0))
+    P_lst[0] *= np.sign((P_lst[0]*P_ref)(0))
+
+    T_est,R_est = estimate_rigtr(P,Q)
+    T_est = exact_translation(R_est*P_lst[0]*~R_est,Q_lst[0])
+
+    return (T_est,R_est,P_lst,Q_lst)
+
 
 # Use the center of mass to estimate the translation
 def estimate_transformation_1(x,y,npoints):
@@ -383,6 +462,85 @@ def estimate_transformation_9(x,y,npoints):
     # T_est = 1 + (1/2)*einf*t_est
 
     return (T_est,R_est,P_lst,P_lst)
+
+def estimate_transformation_10(x,y,npoints):
+    '''CGA exact translation
+    '''
+    eig_grades = [1,2]
+    # Convert to CGA
+    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
+
+    # Get the eigenbivectors
+    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
+    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+
+    # Transform list of multivectors into an array
+    P = mv.concat(P_lst)
+    Q = mv.concat(Q_lst)
+
+    # Rescale Q to the appropriate scale factor
+    P_ref,Q_ref = compute_references(p,q)
+    Q /= (Q*Q_ref)(0)
+    P /= (P*P_ref)(0)
+
+    # print((Q*Q_ref)(0))
+    # print(P_ref)
+
+    # Q *= (Q*Q_ref)(0)/(P*P_ref)(0)
+    Q_lst[0] /= (Q_lst[0]*Q_ref)(0)
+    P_lst[0] /= (P_lst[0]*P_ref)(0)
+
+
+    # P_lst[1] *= np.sign((P_lst[1]*P_ref)(0)*(Q_lst[1]*Q_ref)(0))
+    # print("P_lst =",P_lst)
+    # print("Q_lst =",Q_lst)
+    # signs = get_orient_diff(P,Q,p,q)
+    # P = P*signs
+    T_est,R_est = estimate_rigtr(P,Q)
+    # print("algorithm 10")
+    T_est = exact_translation(R_est*P_lst[0]*~R_est,Q_lst[0])
+
+    # print(pyga.numpy_max((T_est*R_est*einf*~R_est*~T_est - einf)))
+    # print(pyga.numpy_max((T_est*R_est*p*~R_est*~T_est - q)))
+
+
+    # T_est1 = exact_translation(R_est*P_lst[1]*~R_est,Q_lst[1])
+    # t_est = -(eo|(T_est0 + T_est1))
+    # T_est = 1 + (1/2)*einf*t_est
+    # print()
+
+
+    return (T_est,R_est,P_lst,Q_lst)
+
+def estimate_transformation_11(x,y,npoints):
+    ''' CGA exact translation 2
+    '''
+    eig_grades = [1]
+    s = eo + x + (1/2)*(x*x)(0)*einf
+    q = eo + y + (1/2)*(y*y)(0)*einf
+
+    S_lst,lambda_P = get_3dcga_eigmvs(s,grades=eig_grades)
+    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+
+    S = mv.concat(S_lst)
+    Q = mv.concat(Q_lst)
+
+    S_ref = einf^(1+ s.sum()/npoints)
+    Q_ref = einf^(1+ q.sum()/npoints)
+
+    S *= mv.sign((S*S_ref)(0)*(Q*Q_ref)(0))
+    S_lst[0] *= np.sign((S_lst[0]*S_ref)(0)*(Q_lst[0]*Q_ref)(0))
+
+    # print("algorithm 11")
+    T_est = exact_translation(S_lst[0],Q_lst[0])
+    
+    # print("Check Translation:",pyga.numpy_max(Proj_I(T_est*S*~T_est - Q)))
+    # print("Check Translation:",(Proj_I(T_est*S*~T_est - Q)))
+
+    R_est = vga3d.multivector([1],basis=['e'])
+
+    return (T_est,R_est,S_lst,Q_lst)
 
 
 eps = 1e-12

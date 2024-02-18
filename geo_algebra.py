@@ -11,6 +11,9 @@ def nparray_to_mvarray(ga,grade,x_array):
         return ga.multivector(x_array.tolist())
     return ga.multivector(x_array.tolist(),grades=grade)
 
+def nparray_to_mvarray_from_basis(ga,basis,x_array):
+    return ga.multivector(x_array.tolist(),basis=basis)
+
 def nparray_to_vecarray(ga,x_array):
     return ga.multivector(x_array.tolist(),grades=1)
 
@@ -86,6 +89,12 @@ def get_ga_basis_vectors(ga):
     
     return (basis,rec_basis)
 
+def rdn_mvarray_from_basis(ga,basis,size):
+    mvsize = len(basis)
+    ones = 0.5*np.ones([size,mvsize])
+    x_array = np.random.rand(size,mvsize) - ones
+    return nparray_to_mvarray_from_basis(ga,basis,x_array)
+
 def rdn_multivector_array(ga,grades,size):
     if grades is None:
         mvsize = ga.size()
@@ -98,10 +107,21 @@ def rdn_multivector_array(ga,grades,size):
     x_array = np.random.rand(size,mvsize) - ones
     return nparray_to_mvarray(ga,grades,x_array)
 
+def rdn_gaussian_mvarray_from_basis(mu,sigma,ga,basis,size):
+    mvsize = len(basis)
+    x_array = np.random.normal(mu,sigma,[size,mvsize])
+    return nparray_to_mvarray_from_basis(ga,basis,x_array)
+
 def rdn_gaussian_multivector_array(mu,sigma,ga,grades,size):
+    if grades is None:
+        mvsize = ga.size()
+        x_array = np.random.normal(mu,sigma,[size,mvsize])
+        return nparray_to_mvarray(ga,grades,x_array)
+
     mvsize = ga.size(grades)
     x_array = np.random.normal(mu,sigma,[size,mvsize])
     return nparray_to_mvarray(ga,grades,x_array)
+
 
 
 def rotor_sqrt(R):

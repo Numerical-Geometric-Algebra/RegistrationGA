@@ -121,17 +121,13 @@ def biv_decomp(B,basis,rec_basis):
     while i < len(a):
         Bi = -(F(a[i])*pyga.inv(a[i]))(2)
         B_lst += [Bi]
-
-        if pyga.check_null_mv(Bi):
-            i += 1
-        else:
-            i += 2
+        i += 2
     
     A = 1
     for i in range(len(a)):
         A ^= a[i]
 
-    return B_lst,a
+    return B_lst
 
 
 def compute_versor_symmetric(H_diff,H_adj,basis,rec_basis):

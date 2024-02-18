@@ -97,8 +97,8 @@ def gen_rdn_3dcga_rotor():
     b = rdn_3dcga_vector()
     return pyga.normalize_mv(a*b)
 
-def rdn_3dcga_translator():
-    t = 10*rdn_3dvga_vector()
+def rdn_3dcga_translator(scale=10):
+    t = scale*rdn_3dvga_vector()
     return 1 + (1/2)*einf*t
 
 def gen_pseudordn_rigtr(angle,mag):
@@ -133,11 +133,10 @@ def Proj_I(X):
     '''Projects to 3D VGA, I is the unit pss of VGA'''
     return X(0) + ((X(1) + X(2) + X(3))|I)*~I
 
-
-# Extract the coefficints of a multivector 
-# The multivector can be written in the form 
-# X = eo*A + einf*B + (eo^einf)*C + D
 def get_coeffs(X):
+    ''' Extract the coefficints of a multivector 
+        The multivector can be written in the form 
+        X = eo*A + einf*B + (eo^einf)*C + D'''
     A = -Proj_I(einf|X)
     B = -Proj_I(eo|X)
     C = Proj_I(X|(eo^einf))
@@ -202,6 +201,36 @@ def translation_from_cofm(y,x,R_est,n_points):
 
     return T_est
 
+def exact_translation(S,Q):
+
+    Q /= (Q*einf)(0)
+    S /= (S*einf)(0)
+
+    Q1,Q2,Q3,Q4 = get_coeffs(Q)
+    S1,S2,S3,S4 = get_coeffs(S)
+
+    t_est = ((Q3 + Q4 - (S3 + S4))*pyga.inv(Q1))(1)
+    T_est = 1 + (1/2)*einf*t_est
+
+    # print(pyga.numpy_max(S1 - Q1))
+    # print(pyga.numpy_max((1/2)*(t_est*t_est)(0)*S1 - (t_est^(t_est|S1)) - (t_est^S3) + (t_est|S4) + S2 - Q2))
+    # print(pyga.numpy_max((t_est|S1) + S3 - Q3))
+    # print(pyga.numpy_max((t_est^S1) + S4 - Q4))
+    # print("S*S =",S*S)
+    # print("Q*Q =",Q*Q)
+    # print("T_est*S*~T_est =",T_est*S*~T_est)
+    # print("Q =",Q)
+    # print(pyga.mag_sq(Q1))
+    # print(pyga.mag_sq(S1))
+
+    # print("T_est*S*~T_est - Q =",Proj_I(T_est*S*~T_est - Q))
+
+
+    # print()
+
+    # print("The other (trans) equation:",(1/2)*(t*t)(0)*P1 - (t^(t|P1)) + P2 - (t^P3) + (t|P4) - Q2)
+
+    return T_est
 
 def estimate_translation(P,Q):
     '''Given two 3D CGA multivector arrays estimate the tranlsation
@@ -232,6 +261,21 @@ def estimate_rigtr(P,Q):
     R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
     T_est = estimate_translation(R_est*P*~R_est,Q)
+    return (T_est,R_est)
+
+def estimate_rigtr_2(P,Q):
+    '''Estimate the rigid transformation U=TR using the eigendecomposition function'''
+    basis,rec_basis = get_3dvga_rotor_basis()
+    A,B,C,D = get_coeffs(P)
+    E,F,G,H = get_coeffs(Q)
+
+    # define the rotor valued function
+    def Func(Rotor):
+        return (E(1)*Rotor*A(1) - E(2)*Rotor*A(2)).sum() 
+        
+    R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
+    R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
+    T_est = estimate_translation(R_est*P(1)*~R_est,Q(1))
     return (T_est,R_est)
 
 
@@ -327,7 +371,7 @@ def get_3dcga_eigmvs(p,grades=[1,2]):
     F = multiga.get_reflections_function(p)
     P_lst,lambda_P = multiga.symmetric_eigen_decomp(F,basis,rec_basis)
 
-    
+    # print("Eigenvalue Check",multiga.check_eigenvalues(F,P_lst,lambda_P))
     # Use the point at infinity to define a sign for the multivectors
     # If the scalar product with the point at infinity is zero then the sign of that zero is used
     for i in range(len(P_lst)):
@@ -421,8 +465,14 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
     phi = np.arccos(cosphi)/np.pi*180
     if(phi > 180):
         phi = 360 - phi
+    
+    # When the translation vector t is zero or t_est is zero then cos_trans will be nan
+    cos_trans = (pyga.normalize_mv(t)|pyga.normalize_mv(t_est))(0)
+    if abs(cos_trans) > 1:
+        cos_trans = 1
+    t_angle_error = np.arccos(cos_trans)
 
-    return ang_error,t_mag_error,phi
+    return ang_error,t_mag_error,t_angle_error,phi
 
 def print_rigtr_error_metrics(R,R_est,T,T_est,m_points=-1,sigma=-1):
     if(m_points > 0):
