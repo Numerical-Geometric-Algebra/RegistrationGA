@@ -35,7 +35,7 @@ def compute_bivector_from_skew(F,basis,rec_basis):
     out = 0
     for i in range(len(basis)):
         out += basis[i]^F(rec_basis[i])
-    return out
+    return out/2
 
 def convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis):
     '''From a set of eigenvectors computes the eigenmultivectors and orders the result by the absolute value of the eigenvalues

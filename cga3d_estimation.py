@@ -203,32 +203,11 @@ def translation_from_cofm(y,x,R_est,n_points):
 
 def exact_translation(S,Q):
 
-    Q /= (Q*einf)(0)
-    S /= (S*einf)(0)
-
     Q1,Q2,Q3,Q4 = get_coeffs(Q)
     S1,S2,S3,S4 = get_coeffs(S)
 
     t_est = ((Q3 + Q4 - (S3 + S4))*pyga.inv(Q1))(1)
     T_est = 1 + (1/2)*einf*t_est
-
-    # print(pyga.numpy_max(S1 - Q1))
-    # print(pyga.numpy_max((1/2)*(t_est*t_est)(0)*S1 - (t_est^(t_est|S1)) - (t_est^S3) + (t_est|S4) + S2 - Q2))
-    # print(pyga.numpy_max((t_est|S1) + S3 - Q3))
-    # print(pyga.numpy_max((t_est^S1) + S4 - Q4))
-    # print("S*S =",S*S)
-    # print("Q*Q =",Q*Q)
-    # print("T_est*S*~T_est =",T_est*S*~T_est)
-    # print("Q =",Q)
-    # print(pyga.mag_sq(Q1))
-    # print(pyga.mag_sq(S1))
-
-    # print("T_est*S*~T_est - Q =",Proj_I(T_est*S*~T_est - Q))
-
-
-    # print()
-
-    # print("The other (trans) equation:",(1/2)*(t*t)(0)*P1 - (t^(t|P1)) + P2 - (t^P3) + (t|P4) - Q2)
 
     return T_est
 
@@ -359,7 +338,7 @@ def best_motor_estimation(V):
     
     Ue = M - s*I*M2
     Re = Proj_I(Ue)
-    Te = 1 - (1/2)*einf*((eo|Ue)*~Re)(1)
+    Te = 1 - einf*((eo|Ue)*~Re)(1)
     
     return Te,Re
 
@@ -470,7 +449,7 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
     cos_trans = (pyga.normalize_mv(t)|pyga.normalize_mv(t_est))(0)
     if abs(cos_trans) > 1:
         cos_trans = 1
-    t_angle_error = np.arccos(cos_trans)
+    t_angle_error = np.arccos(cos_trans)/np.pi*180
 
     return ang_error,t_mag_error,t_angle_error,phi
 
