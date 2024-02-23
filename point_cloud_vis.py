@@ -130,7 +130,7 @@ def get_point_clouds(cfg,base_dir,item=-1):
     
 
 class PCViewer3D:
-    def __init__(self,pcds,draw_primitives=[1,1],sigma_iter=0.0005,sigma=0.01,rdn_rbm=False,eig_grades = [1,2],compare_primitives=False):
+    def __init__(self,pcds,draw_primitives=[True,True,True],sigma_iter=0.0005,sigma=0.01,rdn_rbm=False,eig_grades = [1,2],compare_primitives=False):
         self.draw_primitives_bool = draw_primitives
         self.eig_grades = eig_grades
         self.sigma = sigma
@@ -145,16 +145,35 @@ class PCViewer3D:
         gui.Application.instance.initialize()
         w = gui.Application.instance.create_window("Open3D Example - Events",
                                                640, 480)
+        self.window = w
+        
         self.scene = gui.SceneWidget()
         self.scene.scene = o3d.visualization.rendering.Open3DScene(w.renderer)
+        
+        
+        # self.scene.scene.enable_indirect_light(False)
+        # self.scene.scene.enable_sun_light(False)
+
+        # vis = o3d.visualization.Visualizer()
+        # vis.get_render_option().line_width = 5
+        # o3d.visualization.RenderOption.line_width = 20.0
+
+        # self.scene.scene.get_render_option().line_width = 10
+
         w.add_child(self.scene)
         
         self.material = [0,0,0]
         # self.material = o3d.visualization.rendering.MaterialRecord()
         # self.material.shader = "defaultLit"
-        self.material[0] = self.get_material([0.0,0.0,1.0])
-        self.material[1] = self.get_material([1.0,0.0,0.0])
-        self.material[2] = self.get_material([0.0,1.0,0.0])
+
+        # Color for each point cloud
+        self.pc_color = [[213/255, 65/255, 0],[0, 0, 1],[34/255, 150/255, 0 ]]
+
+        print(self.pc_color)
+
+        self.material[0] = self.get_transparent_material(self.pc_color[0])
+        self.material[1] = self.get_transparent_material(self.pc_color[1])
+        self.material[2] = self.get_transparent_material(self.pc_color[2])
 
         self.scene.scene.add_geometry("Point Cloud0", self.noisy_pcd[0], self.material[0])
         # self.scene.scene.add_geometry("Point Cloud1", self.noisy_pcd[1], self.material)
@@ -165,16 +184,16 @@ class PCViewer3D:
 
         self.primitive_material = [0,0,0]
 
-        self.primitive_material[0] = self.get_material([0.0,0.0,0.5])
-        self.primitive_material[1] = self.get_material([0.5,0.0,0.0])
-        self.primitive_material[2] = self.get_material([0.0,0.5,0.0])
+        self.primitive_material[0] = self.get_transparent_material(self.pc_color[0])
+        self.primitive_material[1] = self.get_transparent_material(self.pc_color[1])
+        self.primitive_material[2] = self.get_transparent_material(self.pc_color[2])
         
-        self.transp_mat = self.get_material([0.0,0.5,0.5])
-        self.transp_mat_neg = self.get_material([0.5,0.5,0.0])
-        self.cylinder_mat = self.get_material([1.0,0.0,0.0])
-        self.cylinder_mat_neg = self.get_material([0.0,1.0,0.0])
+        # self.transp_mat = self.get_transparent_material([0.0,0.5,0.5])
+        # self.transp_mat_neg = self.get_transparent_material([0.5,0.5,0.0])
+        # self.cylinder_mat = self.get_transparent_material([1.0,0.0,0.0])
+        # self.cylinder_mat_neg = self.get_transparent_material([0.0,1.0,0.0])
 
-        self.scene.scene.set_background([0.5,0.5,0.5,1.0])
+        self.scene.scene.set_background([1.0,1.0,1.0,1.0])
         # self.scene.scene.show_axes(True)
         self.rdn_rbm = rdn_rbm
         
@@ -196,9 +215,14 @@ class PCViewer3D:
 
         # Initialize the estimated point cloud in green
         self.pcd[2] = copy.deepcopy(self.pcd[0])
-        self.noisy_pcd[2] = copy.deepcopy(self.pcd[0])
-        color = np.array([[0.0,0.5,0.0]]*pts.shape[0])
-        self.pcd[2].colors = o3d.utility.Vector3dVector(color)
+        
+        self.set_pc_color(0)
+        self.set_pc_color(2)
+
+        self.noisy_pcd[0] = copy.deepcopy(self.pcd[0])
+        self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
+        # color = np.array([[0.0,0.5,0.0]]*pts.shape[0])
+        # self.pcd[2].colors = o3d.utility.Vector3dVector(color)
 
         # self.update_pc(0)
         # self.update_pc(1)
@@ -209,6 +233,12 @@ class PCViewer3D:
         else:
             self.draw_noisy_PCs()
         
+    def set_pc_color(self,j):
+        pts = np.asarray(self.pcd[j].points)
+        n_points = pts.shape[0]
+        color = np.array([self.pc_color[j]]*n_points)
+        self.pcd[j].colors = o3d.utility.Vector3dVector(color)
+
     def draw_noisy_PCs(self):
         self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
         self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
@@ -270,25 +300,71 @@ class PCViewer3D:
         
         # self.draw_primitives(1)
 
-    def get_material(self,color):
+    def get_transparent_material(self,color):
         transp_mat = o3d.visualization.rendering.MaterialRecord()
+
+        transp_mat.shader = 'defaultLitTransparency'
+        # transp_mat.shader = 'defaultLitSSR'
+        # transp_mat.base_color = [0, 70/255, 166/255, 0.7]
+        # transp_mat.base_color = [145/255, 145/255, 145/255, 0.5]
+        transp_mat.base_color = color + [0.7]
+
+        transp_mat.base_roughness = 5.0
+        transp_mat.base_reflectance = 1.0
+        transp_mat.base_clearcoat = 1.0
+        transp_mat.thickness = 5.0
+        transp_mat.transmission = 3
+        transp_mat.absorption_distance = 10
+        # transp_mat.absorption_color = [0.5,0.5,0.5]
+
         # transp_mat.shader = 'defaultLitTransparency'
-        transp_mat.shader = "defaultLit"
-        transp_mat.base_color = color + [0.5]
-        # transp_mat.base_roughness = 0.1
+        # transp_mat.shader = "defaultLit"
+        # transp_mat.base_color = color + [1]
+        # print(transp_mat.base_color)
+
+        # transp_mat.base_roughness = 1.0
         # transp_mat.base_reflectance = 0.0
         # transp_mat.base_clearcoat = 1.0
-        # transp_mat.thickness = 1.0
-        # transp_mat.transmission = 0.0
+        # transp_mat.thickness = 5.0
+        # transp_mat.transmission = 3
         # transp_mat.absorption_distance = 0
         # transp_mat.absorption_color = color
         return transp_mat
+
+    def get_solid_material(self,color):
+        solid_mat = o3d.visualization.rendering.MaterialRecord()
+        # solid_mat.shader = 'defaultLitTransparency'
+        # solid_mat.shader = "defaultLit"
+        solid_mat.base_color = color + [1]
+
+        # solid_mat.base_roughness = 100
+        # solid_mat.base_reflectance = 0
+        # solid_mat.base_clearcoat = 1.0
+        # solid_mat.thickness = 1.0
+        # solid_mat.transmission = 0
+        # solid_mat.absorption_distance = 0
+        # solid_mat.absorption_color = color
+        return solid_mat
+
+    def get_line_material(self,color):
+        solid_mat = o3d.visualization.rendering.MaterialRecord()
+        solid_mat.shader = "defaultLit"
+        solid_mat.base_color = color + [10]
+        solid_mat.base_roughness = 1
+        solid_mat.base_reflectance = 0
+        solid_mat.base_clearcoat = 0
+        solid_mat.thickness = 10.0
+        solid_mat.transmission = 0
+        solid_mat.absorption_distance = 0
+        solid_mat.absorption_color = color
+        return solid_mat
 
 
     def update_pc(self,j):
         # print("Updating Point Cloud "+str(j))
         self.scene.scene.remove_geometry("Point Cloud"+str(j))
-        self.scene.scene.add_geometry("Point Cloud"+str(j), self.noisy_pcd[j], self.material[j])
+        self.scene.scene.add_geometry("Point Cloud"+str(j), self.noisy_pcd[j], self.get_solid_material(self.pc_color[j]))
+        # print(self.pc_color[j])
 
     def run(self):
         gui.Application.instance.run()
@@ -380,25 +456,75 @@ class PCViewer3D:
     
     def get_arrow(self, end, origin=np.array([0, 0, 0]), scale=1):
         vec = end - origin
-        size = 1
+        size = 0.25
         # size = np.sqrt(np.sum(vec**2))
         Rz, Ry = self.calculate_zy_rotation_for_arrow(vec)
-        mesh = o3d.geometry.TriangleMesh.create_arrow(cone_radius=size/17.5 * scale,
-        cone_height=size*0.2 * scale,
+        mesh = o3d.geometry.TriangleMesh.create_arrow(cone_radius=size/10 * scale,
+        cone_height=size*0.4 * scale,
         cylinder_radius=size/30 * scale,
-        cylinder_height=size*(1 - 0.2*scale))
+        cylinder_height=size*2*scale)
         mesh.rotate(Ry, center=np.array([0, 0, 0]))
         mesh.rotate(Rz, center=np.array([0, 0, 0]))
         mesh.translate(origin)
         mesh.compute_vertex_normals()
         return mesh
 
-    def get_circle(self,radius_sq,position,normal):
 
-        # Create a cylinder along the given normal vector
-        cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=np.sqrt(abs(radius_sq)), height=0.0001,resolution=40)
+    def create_2d_torus(self,radius,thickness=0.001,num_points=500):
+        # Create points on the circumference of the circle
+        theta = np.linspace(0, 2*np.pi, num_points)
+        x = radius * np.cos(theta)
+        y = radius * np.sin(theta)
+        z = np.zeros_like(x)
 
-        # Calculate the rotation matrix to align the cylinder with the given normal
+        x1 = (radius - thickness) * np.cos(theta)
+        y1 = (radius - thickness) * np.sin(theta)
+        
+        z2 = -np.ones_like(x)*0.0001
+
+        points = np.r_[np.vstack((x, y, z)).T,np.vstack((x1, y1, z)).T]
+
+        triangles = []
+        for i in range(num_points):
+            triangles.append([i, i+1, i + num_points])            
+
+        for i in range(num_points-1):
+            triangles.append([i + num_points + 1,i + num_points,i+1])
+
+        triangles = np.array(triangles)
+
+        torus_mesh = o3d.geometry.TriangleMesh()
+        torus_mesh.vertices = o3d.utility.Vector3dVector(points)
+        torus_mesh.triangles = o3d.utility.Vector3iVector(triangles)
+
+        points = np.r_[np.vstack((x, y, z2)).T,np.vstack((x1, y1, z2)).T]
+
+        torus_mesh1 = o3d.geometry.TriangleMesh()
+        torus_mesh1.vertices = o3d.utility.Vector3dVector(points)
+        torus_mesh1.triangles = o3d.utility.Vector3iVector(triangles)
+
+        return torus_mesh,torus_mesh1,np.vstack((x, y, z)).T
+
+
+    def create_circle(self,radius, position,normal,num_points=500):
+        thickness = 0.002
+        torus_mesh,torus_mesh1,points = self.create_2d_torus(radius,thickness,num_points)
+    
+        # Create triangles for filling the circle
+        triangles = []
+        for i in range(num_points):
+            triangles.append([i, (i + 1) % num_points, num_points])
+
+        # Convert points and triangles to Open3D format
+        center_point = np.array([[0, 0, 0]])
+        points = np.concatenate((points, center_point), axis=0)
+        triangles = np.array(triangles)
+
+        # Create a TriangleMesh object
+        circle_mesh = o3d.geometry.TriangleMesh()
+        circle_mesh.vertices = o3d.utility.Vector3dVector(points)
+        circle_mesh.triangles = o3d.utility.Vector3iVector(triangles)
+
         normal = np.array(normal)
         z_axis = normal / np.linalg.norm(normal)
         x_axis = np.cross([0, 0, 1], z_axis)
@@ -407,18 +533,22 @@ class PCViewer3D:
         rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
 
         # Apply the rotation matrix to the cylinder
-        cylinder.rotate(rotation_matrix)
+        circle_mesh.rotate(rotation_matrix)
+        torus_mesh.rotate(rotation_matrix)
+        torus_mesh1.rotate(rotation_matrix)
 
-        # Translate the cylinder to the specified position
-        cylinder.translate(position)
-        cylinder.compute_vertex_normals()
-        
-        if(radius_sq < 0):
-            material = self.cylinder_mat_neg
-        else:
-            material = self.cylinder_mat
-        return cylinder,material
+        # Translate the line_set to the specified position
+        circle_mesh.translate(position)
+        torus_mesh.translate(position)
+        torus_mesh1.translate(position)
+
+        circle_mesh.compute_vertex_normals()
+        torus_mesh.compute_vertex_normals()
+        torus_mesh1.compute_vertex_normals()
     
+        return circle_mesh,torus_mesh,torus_mesh1
+
+
     # Draw Center Of Mass (CeOM) of point cloud i
     def draw_CeOM(self,i):
         self.scene.scene.remove_geometry('CeOM'+str(i))
@@ -475,27 +605,7 @@ class PCViewer3D:
         self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
 
     def get_default_algorithm(self):
-        def algorithm_0(x,y,npoints):
-
-            # Convert to CGA
-            p = eo + x + (1/2)*pyga.mag_sq(x)*einf
-            q = eo + y + (1/2)*pyga.mag_sq(y)*einf
-
-            # Get the eigenbivectors
-            P_lst,lambda_P = get_3dcga_eigmvs(p,grades=self.eig_grades)
-            Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=self.eig_grades)
-
-            # Transform list of multivectors into an array
-            P = mv.concat(P_lst)
-            Q = mv.concat(Q_lst)
-
-            # Orient the eigenbivectors by using the points p and q as a reference
-            signs = get_orient_diff(P,Q,p,q)
-            P = P*signs
-            T_est,R_est = estimate_rigtr(P,Q)
-            # T_est = translation_from_cofm(y,x,R_est,self.n_points)
-            return (T_est,R_est,P_lst,Q_lst)
-        return algorithm_0
+        return algorithms.estimate_transformation_0
 
     def compute_primitives(self,j):
         # Do not compute primitives if not drawing
@@ -513,6 +623,7 @@ class PCViewer3D:
         self.P_lst[j] = P_lst
         
 
+    
 
     def draw_primitives(self,j):
         self.remove_primitives(j)
@@ -532,17 +643,28 @@ class PCViewer3D:
                                                   primitive,
                                                   self.primitive_material[j])
             else:
-                if self.draw_primitives_bool[1]:
-                    primitive,_ = self.get_circle(radius_sq,l,d)
+                if self.draw_primitives_bool[1]:    
+                    filled_circle,torus_mesh0,torus_mesh1 = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
+
                     self.scene.scene.add_geometry(str(j)+'primitive'+str(i),
-                                                primitive,
-                                                self.primitive_material[j])
+                                                filled_circle,
+                                                self.get_transparent_material(self.pc_color[j]))
+
+                    self.scene.scene.add_geometry(str(j)+'unfilled_primitive0_'+str(i),
+                                                torus_mesh0,
+                                                self.get_solid_material(self.pc_color[j]))
+
+                    self.scene.scene.add_geometry(str(j)+'unfilled_primitive1_'+str(i),
+                                                torus_mesh1,
+                                                self.get_solid_material(self.pc_color[j]))
+
             if self.draw_primitives_bool[2]:
                 A,B,C,D = get_coeffs(self.P_lst[j][i])
-                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]))
+                A = pyga.normalize_mv(A)
+                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=0.2)
                 self.scene.scene.add_geometry(str(j)+'Arrow'+str(i),
                                                     arrow,
-                                                    self.primitive_material[j])
+                                                    self.get_solid_material(self.pc_color[j]))
                 # print(np.array(A.tolist(1)[0][:3]))
                 
         # print()
@@ -550,6 +672,8 @@ class PCViewer3D:
     def remove_primitives(self,j):
         for i in range(15):
             self.scene.scene.remove_geometry(str(j)+'primitive'+str(i))
+            self.scene.scene.remove_geometry(str(j)+'unfilled_primitive1_'+str(i))
+            self.scene.scene.remove_geometry(str(j)+'unfilled_primitive0_'+str(i))
             self.scene.scene.remove_geometry(str(j)+'Arrow'+str(i))
 
 
@@ -569,8 +693,7 @@ if __name__ == '__main__':
     # Get single bunny 
     # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
     pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
-    src_pcd = pcd
-    tgt_pcd = copy.deepcopy(src_pcd)
+    
 
     # base_dir =  f'/home/francisco/3dmatch/'
     # cfg = load_3DMatch_PCs(base_dir)
@@ -582,21 +705,18 @@ if __name__ == '__main__':
     # tgt_pcd.points = o3d.utility.Vector3dVector(pts)
 
     # Change color of target point cloud
-    pts = np.asarray(tgt_pcd.points)
-    n_points = pts.shape[0]
-    color = np.array([[0,0,0.5]]*n_points)
-    tgt_pcd.colors = o3d.utility.Vector3dVector(color)
+    pts = np.asarray(pcd.points)
+    ceofm = pts.mean(axis=0)
+    pcd.points = o3d.utility.Vector3dVector(pts - ceofm) # Put the center of mass of the bunnies at the origin
+    pcd_copy = copy.deepcopy(pcd)
     
     
-    # Change color of source point cloud
-    pts = np.asarray(src_pcd.points)
-    n_points = pts.shape[0]
-    color = np.array([[0.5,0,0]]*n_points)
-    src_pcd.colors = o3d.utility.Vector3dVector(color)
+    # draw_primitives: (spheres,circles,vectors)
 
-    viewer = PCViewer3D([tgt_pcd,src_pcd],draw_primitives=[True,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
-    # viewer.algorithm = benchmark.estimate_transformation_1
+    viewer = PCViewer3D([pcd,pcd_copy],draw_primitives=[False,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
+    viewer.algorithm = algorithms.estimate_transformation_16
     viewer.update_model()
+
     viewer.run()
 
     '''

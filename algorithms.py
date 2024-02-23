@@ -1,5 +1,9 @@
 from cga3d_estimation import *
+
 import pasta3d
+import open3d as o3d
+# import numpy as np
+
 '''
 In the algorithms for estimating transformations we use the docstring to name
 the function when printing results of the algorithms. Thus the docstring has to be small
@@ -36,6 +40,33 @@ def estimate_transformation_pasta(x,y,npoints):
     y_array = cga3d_vector_array_to_nparray(y)
 
     R_matrix, t_vec = pasta3d.pasta3d_rototranslation(y_array, x_array, 'max')
+
+    R_est = rotmatrix_to_3drotor(R_matrix)
+    t_est = nparray_to_3dvga_vector_array(t_vec)
+    T_est = 1 + (1/2)*einf*t_est
+
+    return (T_est,R_est,None,None)
+
+eye4 = np.eye(4)
+icp_dist_threshold = 100
+
+def estimate_transformation_ICP(x,y,npoints):
+    '''ICP'''
+    x_array = cga3d_vector_array_to_nparray(x)
+    y_array = cga3d_vector_array_to_nparray(y)
+
+    x_pcd = o3d.geometry.PointCloud()
+    x_pcd.points = o3d.utility.Vector3dVector(x_array)
+    y_pcd = o3d.geometry.PointCloud()
+    y_pcd.points = o3d.utility.Vector3dVector(y_array)
+
+    reg_p2p = o3d.pipelines.registration.registration_icp(
+        x_pcd, y_pcd, icp_dist_threshold, eye4,
+        o3d.pipelines.registration.TransformationEstimationPointToPoint())
+    
+    H = reg_p2p.transformation
+    t_vec = H[0:3,3]
+    R_matrix = H[0:3,0:3]
 
     R_est = rotmatrix_to_3drotor(R_matrix)
     t_est = nparray_to_3dvga_vector_array(t_vec)
@@ -102,7 +133,7 @@ def estimate_transformation_12(x,y,npoints):
 
 
 def estimate_transformation_13(x,y,npoints):
-    '''CGA Exact Translation
+    '''CGA Exact Translation V2
         Uses the first eigenvector to estimate the tranlation vector. (Uses the exact translation formula)
         Estimates the rigid transformation between two point clouds using the eigenmultivector.
         From the eigenmultivectors we estimate the rotation and translation. 
@@ -132,6 +163,40 @@ def estimate_transformation_13(x,y,npoints):
     # Use the first eigenmultivector to estimate the translation exactly
     Q_lst[0] *= np.sign((Q_lst[0]*Q_ref)(0))
     P_lst[0] *= np.sign((P_lst[0]*P_ref)(0))
+    T_est = exact_translation(R_est*P_lst[0]*~R_est,Q_lst[0])
+
+    return (T_est,R_est,P_lst,Q_lst)
+
+
+def estimate_transformation_16(x,y,npoints):
+    '''CGA ExactTr
+        For the rotation uses the sign to estimate the equivalance between the eigenmultivectors
+        For the exact translation it scales.
+    '''
+    eig_grades = [1,2]
+    # Convert to CGA
+    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
+
+    # Get the eigenbivectors
+    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
+    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+
+    # Transform list of multivectors into an array
+    P = mv.concat(P_lst)
+    Q = mv.concat(Q_lst)
+
+    # Resign Q to the appropriate sign factor
+    P_ref,Q_ref = compute_references(p,q)
+    
+    Q *= mv.sign((Q*Q_ref)(0))
+    P *= mv.sign((P*P_ref)(0))
+
+    _,R_est = estimate_rigtr(P,Q)
+    
+    # Use the first eigenmultivector to estimate the translation exactly
+    Q_lst[0] /= (Q_lst[0]*Q_ref)(0)
+    P_lst[0] /= (P_lst[0]*P_ref)(0)
     T_est = exact_translation(R_est*P_lst[0]*~R_est,Q_lst[0])
 
     return (T_est,R_est,P_lst,Q_lst)
@@ -299,7 +364,7 @@ def get_VGA_rot_func(x,npoints):
 
 eps = 1e-12
 def estimate_transformation_4(x,y,npoints):
-    '''VGA CeOM
+    '''VGA CeOfM
         Estimates the translation using the center of mass of the point clouds.
         Solves an eigenvalue problem to extract rotation invariant eigenvectors from each point cloud.
     '''
@@ -316,7 +381,8 @@ def estimate_transformation_4(x,y,npoints):
     P_lst,lambda_P = multiga.symmetric_eigen_decomp(F,basis,rec_basis)
     Q_lst,lambda_Q = multiga.symmetric_eigen_decomp(G,basis,rec_basis)
 
-    print("Eigenvalue Check",multiga.check_eigenvalues(F,P_lst,lambda_P))
+    # print("Eigenvalue Check (VGA) G:",multiga.check_eigenvalues(G,Q_lst,lambda_Q))
+    # print("Eigenvalue Check (VGA) F:",multiga.check_eigenvalues(F,P_lst,lambda_P))
     
 
     # Correct the sign of the eigenvectors
@@ -491,9 +557,7 @@ def estimate_transformation_15(x,y,npoints):
     U = get_versor_from_function(H_diff,basis,rec_basis)
 
     # Pseudo project to the space of motors
-    R_est = pyga.normalize_mv(Proj_I(U))
-    t_est = -2*Proj_I(((eo|U)*~R_est)(1))
-    T_est = 1 + (1/2)*einf*t_est
+    T_est,R_est = decompose_motor(U) # Get the rotation and translation from U
 
     return (T_est,R_est,P_lst,P_lst)
 

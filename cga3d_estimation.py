@@ -101,13 +101,17 @@ def rdn_3dcga_translator(scale=10):
     t = scale*rdn_3dvga_vector()
     return 1 + (1/2)*einf*t
 
+def gen_pseudordn_3dvga_rotor(angle):
+    theta = angle*np.pi/180
+    u = pyga.normalize_mv(rdn_3dvga_vector())
+    R = np.cos(theta/2) + I*u*np.sin(theta/2)
+    return R
+
 def gen_pseudordn_rigtr(angle,mag):
     ''' generate a random rigid transformation (rigtr)
         generate a random rotation with a given angle
         and a translation with a given magnitude'''
-    theta = angle*np.pi/180
-    u = pyga.normalize_mv(rdn_3dvga_vector())
-    R = np.cos(theta/2) + I*u*np.sin(theta/2)
+    R = gen_pseudordn_3dvga_rotor(angle)
     t = mag*pyga.normalize_mv(rdn_3dvga_vector())
     T = 1 + (1/2)*einf*t
     return (T,R)
@@ -165,7 +169,15 @@ def plus_norm_sq(X):
     return mag_sq(A) +  mag_sq(B) + mag_sq(C) + mag_sq(D)
 
 
-
+def decompose_motor(U):
+    ''' Decomposes a motor as the composition of a rotation and translation
+        Also serves to pseudo project to the space of motors U = T*R
+    '''
+    # Pseudo project to the space of motors
+    R_est = pyga.normalize_mv(Proj_I(U))
+    t_est = -2*Proj_I(((eo|U)*~R_est)(1))
+    T_est = 1 + (1/2)*einf*t_est
+    return T_est,R_est
 
 eps = 0.001
 def normalize_null_mv(X):
@@ -205,6 +217,8 @@ def exact_translation(S,Q):
 
     Q1,Q2,Q3,Q4 = get_coeffs(Q)
     S1,S2,S3,S4 = get_coeffs(S)
+
+    # print("mag_sq(Q1)=",pyga.mag_sq(Q1))
 
     t_est = ((Q3 + Q4 - (S3 + S4))*pyga.inv(Q1))(1)
     T_est = 1 + (1/2)*einf*t_est
@@ -350,7 +364,7 @@ def get_3dcga_eigmvs(p,grades=[1,2]):
     F = multiga.get_reflections_function(p)
     P_lst,lambda_P = multiga.symmetric_eigen_decomp(F,basis,rec_basis)
 
-    # print("Eigenvalue Check",multiga.check_eigenvalues(F,P_lst,lambda_P))
+    # print("Eigenvalue Check (CGA):",multiga.check_eigenvalues(F,P_lst,lambda_P))
     # Use the point at infinity to define a sign for the multivectors
     # If the scalar product with the point at infinity is zero then the sign of that zero is used
     for i in range(len(P_lst)):
@@ -458,10 +472,11 @@ def print_rigtr_error_metrics(R,R_est,T,T_est,m_points=-1,sigma=-1):
         print("Nbr points:",m_points)
     if(sigma >= 0):
         print("Sigma:", sigma)
-    ang_error,t_mag_error,plane_angle = get_rigtr_error_metrics(R,R_est,T,T_est)
+    ang_error,t_mag_error,t_angle_error,plane_angle = get_rigtr_error_metrics(R,R_est,T,T_est)
     print("Angle between planes of rotation:",plane_angle)
     print("Angle Error:",ang_error)
     print("Translation Error:", t_mag_error)
+    print("arccos(t_hat|t_est_hat):",t_angle_error)
 
 # Still need to divide all of these by the length of the array
 def compute_PC_error(t,R,x,y):
