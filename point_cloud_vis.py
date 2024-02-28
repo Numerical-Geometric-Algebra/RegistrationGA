@@ -219,6 +219,8 @@ class PCViewer3D:
         self.set_pc_color(0)
         self.set_pc_color(2)
 
+        self.arrow_scale = 1
+
         self.noisy_pcd[0] = copy.deepcopy(self.pcd[0])
         self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
         # color = np.array([[0.0,0.5,0.0]]*pts.shape[0])
@@ -294,8 +296,8 @@ class PCViewer3D:
         self.draw_primitives(0)
         self.draw_primitives(2)
         
-        self.draw_CeOM(0)
-        self.draw_CeOM(2)
+        # self.draw_CeOM(0)
+        # self.draw_CeOM(2)
 
         
         # self.draw_primitives(1)
@@ -305,17 +307,15 @@ class PCViewer3D:
 
         transp_mat.shader = 'defaultLitTransparency'
         # transp_mat.shader = 'defaultLitSSR'
-        # transp_mat.base_color = [0, 70/255, 166/255, 0.7]
-        # transp_mat.base_color = [145/255, 145/255, 145/255, 0.5]
-        transp_mat.base_color = color + [0.7]
+        transp_mat.base_color = color + [0.5]
 
-        transp_mat.base_roughness = 5.0
-        transp_mat.base_reflectance = 1.0
-        transp_mat.base_clearcoat = 1.0
-        transp_mat.thickness = 5.0
-        transp_mat.transmission = 3
-        transp_mat.absorption_distance = 10
-        # transp_mat.absorption_color = [0.5,0.5,0.5]
+        transp_mat.base_roughness = 1
+        transp_mat.base_reflectance = 0.0
+        transp_mat.base_clearcoat = 0
+        transp_mat.thickness = 0
+        transp_mat.transmission = 0
+        transp_mat.absorption_distance = 0
+        transp_mat.absorption_color = [0,0,0]
 
         # transp_mat.shader = 'defaultLitTransparency'
         # transp_mat.shader = "defaultLit"
@@ -386,6 +386,13 @@ class PCViewer3D:
                     self.draw_noisy_PCs()
                 else:
                     self.update_model()
+        if e.key == gui.KeyName.M:
+            if e.type == gui.KeyEvent.UP:
+                self.sigma = 0
+                if self.compare_primitives:
+                    self.draw_noisy_PCs()
+                else:
+                    self.update_model()
 
         if e.key == gui.KeyName.Q:
             gui.Application.instance.quit()
@@ -394,8 +401,9 @@ class PCViewer3D:
                 self.draw_noisy_PCs()
             else:
                 self.update_model()
-        if e.key == gui.KeyName.C:
+        if e.key == gui.KeyName.V:
             self.scene.setup_camera(60, self.scene.scene.bounding_box, (0, 0, 0))
+            
 
         if e.key == gui.KeyName.W:
             if e.type == gui.KeyEvent.UP: 
@@ -422,6 +430,40 @@ class PCViewer3D:
                 if not self.compare_primitives:
                     self.update_rbm()
                     self.update_model()
+        
+        if e.key == gui.KeyName.Z:
+            if e.type == gui.KeyEvent.UP:
+                self.draw_primitives_bool[0] = not self.draw_primitives_bool[0]
+                self.draw_primitives(0)
+                # self.draw_primitives(1)
+                self.draw_primitives(2)
+
+        if e.key == gui.KeyName.X:
+            if e.type == gui.KeyEvent.UP:
+                self.draw_primitives_bool[1] = not self.draw_primitives_bool[1]
+                self.draw_primitives(0)
+                # self.draw_primitives(1)
+                self.draw_primitives(2)
+        if e.key == gui.KeyName.C:
+            if e.type == gui.KeyEvent.UP:
+                self.draw_primitives_bool[2] = not self.draw_primitives_bool[2]
+                self.draw_primitives(0)
+                # self.draw_primitives(1)
+                self.draw_primitives(2)
+
+        if e.key == gui.KeyName.R:
+            self.arrow_scale *= 1.1
+            self.draw_primitives(0)
+            # self.draw_primitives(1)
+            self.draw_primitives(2)
+
+        if e.key == gui.KeyName.T:
+            self.arrow_scale /= 1.1
+            self.draw_primitives(0)
+            # self.draw_primitives(1)
+            self.draw_primitives(2)
+
+
 
         return gui.Widget.EventCallbackResult.IGNORED
     
@@ -430,11 +472,8 @@ class PCViewer3D:
         sphere.compute_vertex_normals()
         sphere.paint_uniform_color([0.7, 0.1, 0.1])  # To be changed to the point color.
         sphere = sphere.translate(location)
-        if(radius_sq < 0):
-            material = self.transp_mat_neg
-        else:
-            material = self.transp_mat
-        return sphere,material
+        
+        return sphere
 
     def calculate_zy_rotation_for_arrow(self,vec):
         gamma = np.arctan2(vec[1], vec[0])
@@ -507,7 +546,7 @@ class PCViewer3D:
 
 
     def create_circle(self,radius, position,normal,num_points=500):
-        thickness = 0.002
+        thickness = 0.01
         torus_mesh,torus_mesh1,points = self.create_2d_torus(radius,thickness,num_points)
     
         # Create triangles for filling the circle
@@ -559,8 +598,7 @@ class PCViewer3D:
         sphere.compute_vertex_normals()
         sphere.paint_uniform_color([0.7, 0.1, 0.1])  # To be changed to the point color.
         sphere = sphere.translate(x_bar)
-        material = self.material[i]
-        self.scene.scene.add_geometry('CeOM'+str(i),sphere,material)
+        self.scene.scene.add_geometry('CeOM'+str(i),sphere,self.get_transparent_material(self.pc_color[i]))
 
 
     def estimate_rigtr(self):
@@ -638,10 +676,10 @@ class PCViewer3D:
             d_array = np.array(d)
             if((d_array*d_array).sum() < 1E-12): # check if is sphere
                 if self.draw_primitives_bool[0]:
-                    primitive,_ = self.get_sphere(radius_sq,l)
+                    primitive = self.get_sphere(radius_sq,l)
                     self.scene.scene.add_geometry(str(j)+'primitive'+str(i),
                                                   primitive,
-                                                  self.primitive_material[j])
+                                                  self.get_transparent_material(self.pc_color[j]))
             else:
                 if self.draw_primitives_bool[1]:    
                     filled_circle,torus_mesh0,torus_mesh1 = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
@@ -661,7 +699,7 @@ class PCViewer3D:
             if self.draw_primitives_bool[2]:
                 A,B,C,D = get_coeffs(self.P_lst[j][i])
                 A = pyga.normalize_mv(A)
-                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=0.2)
+                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
                 self.scene.scene.add_geometry(str(j)+'Arrow'+str(i),
                                                     arrow,
                                                     self.get_solid_material(self.pc_color[j]))
@@ -679,25 +717,23 @@ class PCViewer3D:
 
 if __name__ == '__main__':
 
-    '''
-    It seems that usually using the center of mass solution for the translation estimation gives the best results, still need 
-    further experimentation...
-    -501: 0.69 of overlap: Good registration
-    '''
-    # pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
+    sigma = 0.005
     
-
-    sigma = 0.01
-    # sigma = 0
-
-    # Get single bunny 
-    # pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/data/bun000.ply")
-    pcd = o3d.io.read_point_cloud(f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply")
+    filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
+    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
+    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
     
+    pcd = o3d.io.read_point_cloud(filename)
+    print(filename)
 
+    
+    # get 3D match point clouds
     # base_dir =  f'/home/francisco/3dmatch/'
     # cfg = load_3DMatch_PCs(base_dir)
-    # src_pcd,tgt_pcd = get_point_clouds(cfg,base_dir,-1)
+    # index = -123
+    # pcd,_ = get_point_clouds(cfg,base_dir,-123)
+    # print("index=",index)
+    # print("3D Match")
     
     # Add outlier
     # outlier = np.ones([1,3])*0.1
@@ -713,13 +749,20 @@ if __name__ == '__main__':
     
     # draw_primitives: (spheres,circles,vectors)
 
-    viewer = PCViewer3D([pcd,pcd_copy],draw_primitives=[False,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
-    viewer.algorithm = algorithms.estimate_transformation_16
+    viewer = PCViewer3D([pcd,pcd_copy],draw_primitives=[True,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
+    # viewer.algorithm = algorithms.estimate_transformation_16
+    # viewer.algorithm = algorithms.estimate_transformation_4
+    viewer.algorithm = algorithms.estimate_transformation_14
     viewer.update_model()
 
     viewer.run()
 
     '''
+
+    TODO:
+        - Copy name of dataset to the name of the plots.
+
+
     pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
     pts = np.asarray(pcd.points)
     

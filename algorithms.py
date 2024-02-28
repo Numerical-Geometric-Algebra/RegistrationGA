@@ -34,6 +34,12 @@ def compute_references(p,q):
 
     return P_ref,Q_ref
 
+def compute_reference(p):
+    p_ref = p.sum()
+    p_ref /= (p_ref|einf)(0)
+    P_ref = (1 + ii)*einf^(1+ p_ref)
+    return P_ref
+
 def estimate_transformation_pasta(x,y,npoints):
     '''PASTA 3D'''
     x_array = cga3d_vector_array_to_nparray(x)
@@ -168,76 +174,137 @@ def estimate_transformation_13(x,y,npoints):
     return (T_est,R_est,P_lst,Q_lst)
 
 
-def estimate_transformation_16(x,y,npoints):
-    '''CGA ExactTr
-        For the rotation uses the sign to estimate the equivalance between the eigenmultivectors
-        For the exact translation it scales.
-    '''
-    eig_grades = [1,2]
-    # Convert to CGA
-    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
-    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
-
-    # Get the eigenbivectors
-    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
-    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
-
-    # Transform list of multivectors into an array
-    P = mv.concat(P_lst)
-    Q = mv.concat(Q_lst)
-
-    # Resign Q to the appropriate sign factor
-    P_ref,Q_ref = compute_references(p,q)
-    
-    Q *= mv.sign((Q*Q_ref)(0))
-    P *= mv.sign((P*P_ref)(0))
-
-    _,R_est = estimate_rigtr(P,Q)
-    
-    # Use the first eigenmultivector to estimate the translation exactly
-    Q_lst[0] /= (Q_lst[0]*Q_ref)(0)
-    P_lst[0] /= (P_lst[0]*P_ref)(0)
-    T_est = exact_translation(R_est*P_lst[0]*~R_est,Q_lst[0])
-
-    return (T_est,R_est,P_lst,Q_lst)
-
 def estimate_transformation_14(x,y,npoints):
-    '''CGA V2
+    '''CGA exactTRS
         Estimates the rigid body motion between two point clouds using the eigenmultivector.
         From the eigenmultivectors we estimate the rotation and translation. 
         To estimate the sign we use references from the PCs directly.
     '''
-    eig_grades = [1,2]
+    s = 2 # Consider the two eigenbivectors with the smallest eigenvalue
     # Convert to CGA
     p = eo + x + (1/2)*pyga.mag_sq(x)*einf
     q = eo + y + (1/2)*pyga.mag_sq(y)*einf
 
-    # Get the eigenbivectors
-    P_lst,lambda_P = get_3dcga_eigmvs(p,grades=eig_grades)
-    Q_lst,lambda_Q = get_3dcga_eigmvs(q,grades=eig_grades)
+    # Get the eigenvectors    
+    P_vec_lst,lambda_Pvec = get_3dcga_eigmvs(p,grades=1)
+    Q_vec_lst,lambda_Qvec = get_3dcga_eigmvs(q,grades=1)
+    
+    # Get the eigenbivectors and respective eigenvalues. The eigenvalues are ordered from smallest to biggest
+    P_biv_lst,lambda_Pbiv = get_3dcga_eigmvs(p,grades=2)
+    Q_biv_lst,lambda_Qbiv = get_3dcga_eigmvs(q,grades=2)
+
+    P_vec = mv.concat(P_vec_lst)
+    Q_vec = mv.concat(Q_vec_lst)
 
     # Transform list of multivectors into an array
-    P = mv.concat(P_lst)
-    Q = mv.concat(Q_lst)
+    P_biv = mv.concat(P_biv_lst[s:])
+    Q_biv = mv.concat(Q_biv_lst[s:])
 
-    # Resign Q to the appropriate sign factor
-    P_ref,Q_ref = compute_references(p,q)
+    P_ref = compute_reference(p)
+    Q_ref = compute_reference(q)
+    
+    P_biv *= mv.sign((P_biv*P_ref)(0))
+    Q_biv *= mv.sign((Q_biv*Q_ref)(0))
 
-    Q *= mv.sign((Q*Q_ref)(0))
-    P *= mv.sign((P*P_ref)(0))
+    # Computes the optimal rotor from the first coefficients of P and of Q
+    P1,P2,P3,P4 = get_coeffs(P_biv)
+    Q1,Q2,Q3,Q4 = get_coeffs(Q_biv)
+    # define the rotor valued function
+    def Func(Rotor):
+        return (Q1*Rotor*~P1 + ~Q1*Rotor*P1).sum()
 
+    basis,rec_basis = get_3dvga_rotor_basis()
+    R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
+    R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
+    
+    for i in range(len(Q_vec_lst)):
+        Q_vec_lst[i] /= (Q_vec_lst[i]*Q_ref)(0)
+        P_vec_lst[i] /= (P_vec_lst[i]*P_ref)(0)
 
-    _,R_est = estimate_rigtr(P,Q)
+    for i in range(len(Q_biv_lst)):
+        Q_biv_lst[i] /= (Q_biv_lst[i]*Q_ref)(0)
+        P_biv_lst[i] /= (P_biv_lst[i]*P_ref)(0)
 
-    # Use only the vectors (grade one mvs) to estimate the translation
-    # T_est = estimate_translation(R_est*P(1)*~R_est,Q(1))
-
-    # Use the last eigenmultivector to estimate the translation
-    Q_lst[-1] *= np.sign((Q_lst[-1]*Q_ref)(0))
-    P_lst[-1] *= np.sign((P_lst[-1]*P_ref)(0))
-    T_est = exact_translation(R_est*P_lst[-1]*~R_est,Q_lst[-1])
+    P_lst = P_biv_lst + P_vec_lst
+    Q_lst = Q_biv_lst + Q_vec_lst
+    
+    # Use the first eigenvector to estimate the translation
+    T_est = exact_translation(R_est*P_vec_lst[0]*~R_est,Q_vec_lst[0])
 
     return (T_est,R_est,P_lst,Q_lst)
+
+def order_by_abs_eigvalues(P,lambda_P):
+    indices = np.argsort(abs(lambda_P))
+    P = [P[i] for i in indices]
+    lambda_P = lambda_P[indices]
+    return P,lambda_P
+
+def estimate_transformation_16(x,y,npoints):
+    '''CGA ExactTrs II
+        Estimates the rigid body motion between two point clouds using the eigenmultivector.
+        From the eigenmultivectors we estimate the rotation and translation. 
+        To estimate the sign we use references from the PCs directly.
+    '''
+    s = 2 # Consider only the first two eigenbivectors
+    # Convert to CGA
+    p = eo + x + (1/2)*pyga.mag_sq(x)*einf
+    q = eo + y + (1/2)*pyga.mag_sq(y)*einf
+
+    # Get the eigenvectors    
+    P_vec_lst,lambda_Pvec = get_3dcga_eigmvs(p,grades=1)
+    Q_vec_lst,lambda_Qvec = get_3dcga_eigmvs(q,grades=1)
+    # P_vec_lst,lambda_Pvec = order_by_abs_eigvalues(P_vec_lst,lambda_Pvec) 
+    # Q_vec_lst,lambda_Qvec = order_by_abs_eigvalues(Q_vec_lst,lambda_Qvec)
+
+    P_vec = mv.concat(P_vec_lst)
+    Q_vec = mv.concat(Q_vec_lst)
+
+    # Get the eigenbivectors
+    P_biv_lst,lambda_Pbiv = get_3dcga_eigmvs(p,grades=2)
+    Q_biv_lst,lambda_Qbiv = get_3dcga_eigmvs(q,grades=2)
+    P_biv_lst,lambda_Pbiv = order_by_abs_eigvalues(P_biv_lst,lambda_Pbiv) # Reorder the eigenbivectors
+    Q_biv_lst,lambda_Qbiv = order_by_abs_eigvalues(Q_biv_lst,lambda_Qbiv)
+
+
+    # Transform list of multivectors into an array
+    P_biv = mv.concat(P_biv_lst[:s]) 
+    Q_biv = mv.concat(Q_biv_lst[:s])
+
+    P_ref = compute_reference(p)
+    Q_ref = compute_reference(q)
+    
+    P_biv *= mv.sign((P_biv*P_ref)(0))
+    Q_biv *= mv.sign((Q_biv*Q_ref)(0))
+
+    # P_biv /= (P_biv*P_ref)(0)
+    # Q_biv /= (Q_biv*Q_ref)(0)
+
+    P1,P2,P3,P4 = get_coeffs(P_biv)
+    Q1,Q2,Q3,Q4 = get_coeffs(Q_biv)
+
+    # lambda_P = vga3d.multivector(np.expand_dims(lambda_Pbiv,axis=1).tolist(),basis=['e'])(0)
+    # lambda_Q = vga3d.multivector(np.expand_dims(lambda_Qbiv,axis=1).tolist(),basis=['e'])(0)
+
+    # Weight by the absolute value of the eigenvalues
+    # P1 = P1*(abs(lambda_P) + abs(lambda_Q))
+    # Q1 = Q1*(abs(lambda_P) + abs(lambda_Q))
+
+    # define the rotor valued function
+    def Func(Rotor):
+        return (Q1*Rotor*~P1 + ~Q1*Rotor*P1).sum()
+
+    basis,rec_basis = get_3dvga_rotor_basis()
+    R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
+    R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
+    
+    for i in range(len(Q_vec_lst)):
+        Q_vec_lst[i] /= (Q_vec_lst[i]*Q_ref)(0)
+        P_vec_lst[i] /= (P_vec_lst[i]*P_ref)(0)
+    
+    # Use the first eigenvector to estimate the translation
+    T_est = exact_translation(R_est*P_vec_lst[0]*~R_est,Q_vec_lst[0])
+
+    return (T_est,R_est,P_biv_lst,Q_biv_lst)
 
 
 # Use the center of mass to estimate the translation
@@ -364,7 +431,7 @@ def get_VGA_rot_func(x,npoints):
 
 eps = 1e-12
 def estimate_transformation_4(x,y,npoints):
-    '''VGA CeOfM
+    '''VGA CeofMass
         Estimates the translation using the center of mass of the point clouds.
         Solves an eigenvalue problem to extract rotation invariant eigenvectors from each point cloud.
     '''

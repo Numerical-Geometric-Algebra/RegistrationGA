@@ -249,7 +249,8 @@ def estimate_rigtr(P,Q):
 
     # define the rotor valued function
     def Func(Rotor):
-        return (E(1)*Rotor*A(1) - E(2)*Rotor*A(2)).sum() 
+        return (E*Rotor*~A + ~E*Rotor*A).sum()
+        # return (E(1)*Rotor*A(1) - E(2)*Rotor*A(2)).sum() 
         
     R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
@@ -264,7 +265,7 @@ def estimate_rigtr_2(P,Q):
 
     # define the rotor valued function
     def Func(Rotor):
-        return (E(1)*Rotor*A(1) - E(2)*Rotor*A(2)).sum() 
+        return (E(1)*Rotor*A(1) - E(2)*Rotor*A(2)).sum()
         
     R_lst,lambda_R = multiga.symmetric_eigen_decomp(Func,basis,rec_basis)
     R_est = R_lst[3] # Chose the eigenrotor with the biggest eigenvalue
