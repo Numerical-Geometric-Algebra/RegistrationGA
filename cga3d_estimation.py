@@ -308,6 +308,16 @@ def exact_rotation(a1,a2,b1,b2):
     R_sq = (b1 - Pperp_a1)*pyga.inv(P_a1)
     return pyga.rotor_sqrt(R_sq)
 
+def axis_angle_to_rotor(axis,angle):
+    v = pyga.normalize_mv(vga3d.multivector(axis.tolist(),grades=1))
+    Rotor = np.cos(angle/2) + I*v*np.sin(angle/2)
+    return Rotor
+
+def rotor3d_to_matrix(Rotor):
+    basis,rec_basis = get_3dvga_basis(1)
+    R_matrix = multiga.get_matrix(lambda x: Rotor*x*~Rotor,basis,rec_basis).T
+    return R_matrix
+
 
 def rotmatrix_to_3drotor(rot_matrix):
     '''Takes a 3D rotation matrix and computes the 3D rotor'''
@@ -374,6 +384,11 @@ def get_3dcga_eigmvs(p,grades=[1,2]):
     
     return (P_lst,lambda_P)
 
+def compute_reference(p):
+    p_ref = p.sum()
+    p_ref /= (p_ref|einf)(0)
+    P_ref = (1 + ii)*(einf^(1+ p_ref))
+    return P_ref
 
 ''' Sign estimation functions. These are used to estimate the sign of ambiguous eigenmultivectors '''
 

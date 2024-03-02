@@ -184,14 +184,12 @@ def get_name_filepath(filepath):
 
 if __name__ == '__main__':
 
-    show_plot = False
+    show_plot = True
     save_data = True
 
     # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-
+    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
     # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
-    
 
     pcd = o3d.io.read_point_cloud(filename)
     pts = np.asarray(pcd.points)
@@ -242,12 +240,12 @@ if __name__ == '__main__':
     # niters = 1
     # ###### Rotation angle and translation increments for each experience
     # rotangle = 10
-    # tscaling = 10
-    # n_exps = 30
-    # sigmas = 0
+    # tscaling = 0.01
+    # n_exps = 10
+    # sigmas = 0.01
     # x_axis = np.arange(n_exps)
     # xlabel_str = "Iteration"
-    # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory"
+    # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory_"
 
     '''DUMMY experiments'''
     # niters = 1
@@ -261,47 +259,38 @@ if __name__ == '__main__':
     # trajectory = False
 
     '''Increasing the NOISE of the point clouds'''
-    trajectory = False
-    niters = 1000
-    tscaling = 1
-    rotangle = None # Set to none for random rotation angle
-    sigmas = np.arange(0.000,0.0200001,0.001)
-    n_exps = len(sigmas)
-    x_axis = sigmas
-    xlabel_str = r'Noise ($\sigma$)'
-    fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
+    # trajectory = False
+    # niters = 1000
+    # tscaling = 1
+    # rotangle = None # Set to none for random rotation angle
+    # sigmas = np.arange(0.000,0.0500001,0.001)
+    # n_exps = len(sigmas)
+    # x_axis = sigmas
+    # xlabel_str = r'Noise ($\sigma$)'
+    # fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
 
-    experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
-    benchmark_values = run_experiments(pts,experiments,algorithms)
+    # experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
+    # benchmark_values = run_experiments(pts,experiments,algorithms)
     
-    filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+    # filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
     
+    # with open(filename_bench, "rb") as f:
+    #     dct = pickle.load(f)
+    # plot_benchmarks(dct,show_plot)
+
+
     '''Single Experiment (Histogram Plot)'''
-    sigmas = 0.01
-    fig_name_end = "sigma_" + str(sigmas).replace('.','_')
-
-    experiments = get_experiments(n_exps=1,niters=niters,sigma=sigmas,tscaling=1,rotangle=None,noutliers=0,maxoutlier=0,trajectory=False)
-    benchmark_values = run_single_experiment(pts,experiments[0],algorithms)
-    filename = save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigmas)
-    
-    plot_histogram(filename)
-    plot_benchmarks(filename_bench,show_plot)
-
-
-# Should I make the plots all inside the same figure???
-
-'''
-Benchmarks:
-    Bench1: (Random Trajectory)
-        niters = 100
-        rotangle = 1
-        tscaling = 0.01
-        n_exps = 20
-        sigmas = 0.01
-        x_axis = np.arange(n_exps)
-        xlabel_str = "Iteration"
-        fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory"
-        experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=True)
-
-
-'''
+    sigmas_lst = [0,0.001,0.005,0.01,0.02]
+    for i in range(len(sigmas_lst)):
+        print("Experiment",i,"for histogram")
+        sigmas = sigmas_lst[i]
+        print("sigma =",sigmas)
+        fig_name_end = "sigma_" + str(sigmas).replace('.','_')
+        niters = 1000
+        experiments = get_experiments(n_exps=1,niters=niters,sigma=sigmas,tscaling=1,rotangle=None,noutliers=0,maxoutlier=0,trajectory=False)
+        benchmark_values = run_single_experiment(pts,experiments[0],algorithms)
+        filename_pickle = save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigmas)
+        
+        with open(filename_pickle, "rb") as f:
+            dct = pickle.load(f)
+        plot_histogram(dct) # creates an histogram for the data and saves in a file

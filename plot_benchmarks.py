@@ -11,7 +11,7 @@ from algorithms import get_algorithm_name
 
 
 # Three consecutive figures. Ratios for plots:
-ratio = [741,503]
+ratio = [735,500]
 scale = 0.007
 legend = True
     
@@ -80,9 +80,11 @@ def legend_savefig(fig_name,ax,y_pos=1.3,legend_in=False,legend=True):
             # Puts the legend outside of the plot (used for putting in the paper)
             ax.legend(loc='upper center', bbox_to_anchor=(0.5, y_pos),
                 ncol=2, fancybox=True, shadow=True)
+    plt.tight_layout()
     # Save figure if file name is set
     if fig_name is not None:
         plt.savefig("Plots/" + fig_name + ".pdf", bbox_inches="tight")
+    
 
 def plot_experiments(bench,x_axis,title,xlabel_str,algorithms,marker_style,fig_name=None):
     ''' Plots experiments (worst and best in the different plots)'''
@@ -199,15 +201,20 @@ def set_font_size():
 
     plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
     plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
     plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
     plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
     plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
     plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    plt.rc('axes', labelsize=18)    # fontsize of the x and y labels
 
-def plot_histogram(filename):
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
+def check_if_in_list(a,list):
+    for i in range(len(list)):
+        if a == list[i]:
+            return True
+    return False
+
+def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None):
+    
 
     sigma = dct["sigma"]
     bench_rot = dct["bench_rot"]
@@ -218,43 +225,102 @@ def plot_histogram(filename):
 
     fig_name = "histogram_" + fig_name_end + dt_string
     
-
-
+    
     color = cm.rainbow(np.linspace(0, 1, len(algorithms)))
-
     label = []
     for i in range(len(algorithms)):
         label += [get_algorithm_name(algorithms[i])]
 
-    # label = label[:-1]
-    # color = color[:-1]
-    # bench_pos = bench_pos[:-1]
-    # bench_rot = bench_rot[:-1]
 
     set_font_size()
 
     fig,(ax1,ax2) = plt.subplots(2,figsize=(ratio[0]*scale, ratio[1]*scale))
 
     # Plot translation
-    ax1.hist(bench_pos.T,100,histtype='bar',label=label,color=color,density=True)
+    ax1.hist(bench_pos.T,nbins,histtype='bar',label=label,color=color,density=True,range=pos_range)
     ax1.set_xlabel("Translation Error (m)")
     ax1.legend()
+
+
+    start, end = ax1.get_xlim()
+
+    # num_ticks = 4
+    # xticks = np.linspace(0,end,num_ticks)
+
+    # stepsize = 0.001
+    # xticks = np.arange(0, end, stepsize)
+    # ax1.set_xticks(xticks)
     
+
     # Plot rotation
-    ax2.hist(bench_rot.T,100,histtype='bar',label=label,color=color,density=True)
+    ax2.hist(bench_rot.T,nbins,histtype='bar',label=label,color=color,density=True,range=rot_range)
     ax2.set_xlabel(r"Rotation Error ($\degree$)")
-    ax2.legend()
+    # ax2.legend()
+
+
 
     plt.tight_layout()
-    plt.savefig("Plots/" + fig_name + ".pdf")
+    plt.savefig("Plots/" + fig_name + ".pdf",bbox_inches="tight")
 
     # plt.show()
     
+def filter_dictionary_single_exp(dct,alg_names):
+    bench_rot = dct["bench_rot"]
+    bench_pos = dct["bench_pos"]
+    algorithms = dct["algorithms"]
+    
+    bench_pos_list = []
+    bench_rot_list = []
+    algorithms_list = []
 
+    for i in range(len(algorithms)):
+        if(check_if_in_list(get_algorithm_name(algorithms[i]),alg_names)):
+            bench_pos_list += [bench_pos[i]]
+            bench_rot_list += [bench_rot[i]]
+            algorithms_list += [algorithms[i]]
 
-def plot_benchmarks(filename,show_plot=False):
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
+    dct["bench_rot"] = np.r_[bench_rot_list]
+    dct["bench_pos"] = np.r_[bench_pos_list]
+    dct["algorithms"] = np.r_[algorithms_list]
+
+    return dct
+
+def filter_dictionary(dct,alg_names):
+    bench_rot = dct["bench_rot"]
+    bench_pos = dct["bench_pos"]
+    algorithms = dct["algorithms"]
+    
+    bench_pos_list = []
+    bench_rot_list = []
+    algorithms_list = []
+    
+    for i in range(len(bench_pos)): # iterates for each type of benchmark
+        bench_pos_i = bench_pos[i].T
+        bench_rot_i = bench_rot[i].T
+        bench_pos_listj = []
+        bench_rot_listj = []
+        for j in range(len(algorithms)):
+            if(check_if_in_list(get_algorithm_name(algorithms[j]),alg_names)):
+                bench_pos_listj += [bench_pos_i[j]]
+                bench_rot_listj += [bench_rot_i[j]]
+        bench_pos_list += [np.r_[bench_pos_listj].T]
+        bench_rot_list += [np.r_[bench_rot_listj].T]
+
+    for j in range(len(algorithms)):
+            if(check_if_in_list(get_algorithm_name(algorithms[j]),alg_names)):
+                algorithms_list += [algorithms[j]]
+
+    dct["bench_rot"] = bench_rot_list
+    dct["bench_pos"] = bench_pos_list
+    dct["algorithms"] = algorithms_list
+
+    return dct
+    
+    
+
+def plot_benchmarks(dct,show_plot=False):
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
 
     # plt.style.use('dark_background')
     # plt.style.use('bmh')    
@@ -295,12 +361,28 @@ def plot_benchmarks(filename,show_plot=False):
     plot_experiments_3(bench_pos,x_axis,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,pos_file_name,legend=legend)
 
     # Plots the worst experiments in the same figure
-    plot_experiments_5(bench_rot,bench_pos,x_axis,angle_error_str,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,worst_filename)
+    # plot_experiments_5(bench_rot,bench_pos,x_axis,angle_error_str,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,worst_filename)
 
 if __name__ == "__main__":
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_28_02_2024_15_38_58.pickle"
-    plot_benchmarks(filename)
+    alg_names = ["VGA CeofMass","CGA exactTRS"]
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_01_03_2024_04_03_08.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_12_59_02.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"
+    with open(filename, "rb") as f:
+        dct = pickle.load(f)
+    dct = filter_dictionary(dct,alg_names)
+    plot_benchmarks(dct)
+    
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_01_03_2024_04_20_19.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_29_02_2024_13_00_45.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01ArmadilloBack_0_29_02_2024_02_28_25.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01dragonMouth5_0_29_02_2024_07_32_06.pickle"
+    with open(filename, "rb") as f:
+        dct = pickle.load(f)
+    dct = filter_dictionary_single_exp(dct,alg_names)
+    # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
+    plot_histogram(dct,nbins=100)
 
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01_bun_zipper_res2_28_02_2024_15_54_57.pickle"
-    plot_histogram(filename)
+    plt.show()
 

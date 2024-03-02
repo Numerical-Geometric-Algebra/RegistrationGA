@@ -159,9 +159,45 @@ class PCViewer3D:
         # o3d.visualization.RenderOption.line_width = 20.0
 
         # self.scene.scene.get_render_option().line_width = 10
+        # em = w.theme.font_size
+        # w.add_child(self.scene)
+        
+        # layout = gui.Vert(0, gui.Margins(0.5 * em, 0.5 * em, 0.5 * em,
+        #                                  0.5 * em))
 
+        # collapse = gui.CollapsableVert("Widgets", 0.33 * em,
+                                    #    gui.Margins(em, 0, 0, 0))
+        # layout.add_child(collapse)
+        # w.add_child(layout)
+        # gui layout
+        # gui_layout = gui.Vert(0, gui.Margins(0.5 * em, 0.5 * em, 0.5 * em, 0.5 * em))
+        # # create frame that encapsulates the gui
+        # gui_layout.frame = gui.Rect(w.content_rect.x, w.content_rect.y, 500, w.content_rect.height)
+        # self.scene.frame = gui.Rect(500, w.content_rect.y, 900, w.content_rect.height)
+        # w.add_child(gui_layout)
         w.add_child(self.scene)
         
+        # self._widget_idx = 0
+        # hz = gui.Horiz(spacing=5)
+        # push_widget_btn = gui.Button('Push widget')
+        # push_widget_btn.vertical_padding_em = 0
+        # pop_widget_btn = gui.Button('Pop widget')
+        # pop_widget_btn.vertical_padding_em = 0
+        # stack = gui.WidgetStack()
+        # stack.set_on_top(lambda w: print(f'New widget is: {w.text}'))
+        # hz.add_child(gui.Label('WidgetStack '))
+        # hz.add_child(push_widget_btn)
+        # hz.add_child(pop_widget_btn)
+        # hz.add_child(stack)
+        # w.add_child(hz)
+
+        # def push_widget():
+        #     self._widget_idx += 1
+        #     stack.push_widget(gui.Label(f'Widget {self._widget_idx}'))
+
+        # push_widget_btn.set_on_clicked(push_widget)
+        # pop_widget_btn.set_on_clicked(stack.pop_widget)
+
         self.material = [0,0,0]
         # self.material = o3d.visualization.rendering.MaterialRecord()
         # self.material.shader = "defaultLit"
@@ -613,7 +649,7 @@ class PCViewer3D:
         x = nparray_to_3dvga_vector_array(x_pts)
         y = nparray_to_3dvga_vector_array(y_pts)
         
-        # Use the chosen algorithm to estimate the RBM
+        # Use the chosen algorithm to estimate the RT
         T_est,R_est,P_lst,Q_lst = self.algorithm(x,y,self.n_points)
 
         t_est = -2*eo|T_est
@@ -717,10 +753,10 @@ class PCViewer3D:
 
 if __name__ == '__main__':
 
-    sigma = 0.005
+    sigma = 0.05
     
-    filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
+    # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
+    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
     # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
     
     pcd = o3d.io.read_point_cloud(filename)

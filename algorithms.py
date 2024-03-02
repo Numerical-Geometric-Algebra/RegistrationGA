@@ -34,11 +34,6 @@ def compute_references(p,q):
 
     return P_ref,Q_ref
 
-def compute_reference(p):
-    p_ref = p.sum()
-    p_ref /= (p_ref|einf)(0)
-    P_ref = (1 + ii)*einf^(1+ p_ref)
-    return P_ref
 
 def estimate_transformation_pasta(x,y,npoints):
     '''PASTA 3D'''
