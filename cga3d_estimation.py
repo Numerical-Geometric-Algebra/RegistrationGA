@@ -179,6 +179,9 @@ def decompose_motor(U):
     T_est = 1 + (1/2)*einf*t_est
     return T_est,R_est
 
+def project_motor(M):
+    T,R = decompose_motor(M)
+    return T*R
 eps = 0.001
 def normalize_null_mv(X):
     '''Normalizes all types of multivectors

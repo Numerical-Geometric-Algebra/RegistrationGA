@@ -14,7 +14,7 @@ import os
 import platform
 
 from cga3d_estimation import *
-import algorithms
+import algorithms_eigmvs as algs
 import multilinear_algebra as multiga
 
 import sys
@@ -194,9 +194,6 @@ class Settings:
         self.transp_mat.absorption_distance = 0
         self.transp_mat.absorption_color = [0,0,0]
 
-        
-        # return transp_mat
-
 
     def set_material(self, name):
         self.material = self._materials[name]
@@ -217,7 +214,7 @@ class Settings:
 class PointCloudSettings:
     '''Class for a single point cloud'''
     def __init__(self,pcd,id):
-        self.translation_axis = np.zeros(3)
+        self.translation_axis = np.array([1,2,4])
         self.translation_magnitude = 0
         self.rotation_angle = 0
         self.rotation_axis = np.array([1,0,0])
@@ -234,6 +231,8 @@ class PointCloudSettings:
         self.geometries = []
         self.ground_eigmvs = []
         self.eigmvs = []
+        self.eigbivs = []
+        self.eigvecs = []
         self.show = True
 
     def compute_transformation(self): 
@@ -241,9 +240,17 @@ class PointCloudSettings:
         translation_vector = self.translation_magnitude*self.translation_axis
         
         # Compute the rotor: Rotor = cos(angle) + I*axis*sin(angle)
-        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)  
+        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
         rotation_matrix = rotor3d_to_matrix(Rotor)
         return translation_vector,rotation_matrix,Rotor
+
+    def compute_motor(self):
+        ''' Computes a motor from the axis angle and translation vector''' 
+        t_vec = self.translation_magnitude*self.translation_axis
+        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
+        t = vga3d.multivector(t_vec.tolist(),grades=1)
+        Translator = 1 + (1/2)*einf*t
+        return Translator*Rotor
 
     def update_noisy_pcd(self,scene,material):
         '''Update the point cloud from a given scene'''
@@ -269,48 +276,99 @@ class PointCloudSettings:
         self.translation_axis = trans_axis
         self.translation_magnitude = trans_mag
 
-    
+    def motor_to_rotation_translation(self,Motor):
+        ''' Takes a motor and computes the rotation matrix and translation vector'''
+        T,R = decompose_motor(Motor)
+        t_vec = np.array((-2*(eo|T)).tolist(1)[0][:3])
+        R_matrix = rotor3d_to_matrix(R)
+        return t_vec,R_matrix
 
-    def update_point_cloud(self,scene,material,transp_mat):
+
+    def update_point_cloud_2(self,scene,material,transp_mat):
         '''Computes the rigid transformation and applies it to the points and the primitives
            Computes a motor and rotation matrix '''
 
-        t,R,Rotor = self.compute_transformation()
-        
-        t_old = vga3d.multivector(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
-        Motor_old = (1+(1/2)*einf*t_old)*self.Rotor
+        # t,R,Rotor = self.compute_transformation()
+        Motor_new = self.compute_motor()
+        t_new,R_new = self.motor_to_rotation_translation(Motor_new)
 
-        t_new = vga3d.multivector(t.tolist(),grades=1) # Convert to geometric algebra
-        Motor_new = (1+(1/2)*einf*t_new)*Rotor
+        # t_old = vga3d.multivector(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
+        # Motor_old = (1+(1/2)*einf*t_old)*self.Rotor
+
+        Motor_old = self.Motor
+        # t_new = vga3d.multivector(t.tolist(),grades=1) # Convert to geometric algebra
+        # Motor_new = (1+(1/2)*einf*t_new)*Rotor
         
         Motor = Motor_new*~Motor_old
+        t,R = self.motor_to_rotation_translation(Motor)
+
         
         # Rotate and translate the point cloud data
         data = [self.pcd,self.noisy_pcd]
         for i in range(len(data)):
+            data[i].rotate(R@self.rotation_matrix.T, center=np.array([0, 0, 0]))
             data[i].translate(-self.translation_vector)
             data[i].rotate(R@self.rotation_matrix.T, center=np.array([0, 0, 0]))
             data[i].translate(t)
         
-        # Apply the rigid transformation to the eigenmultivectors using the motor
-        for i in range(len(self.eigmvs)):
-            self.eigmvs[i] = Motor*self.eigmvs[i]*~Motor
-
+        # # Apply the rigid transformation to the eigenmultivectors using the motor
         # for i in range(len(self.eigmvs)):
+        #     self.eigmvs[i] = Motor*self.eigmvs[i]*~Motor
+
+        # Apply the rigid transformation to the eigenbivectors using the motor
+        for i in range(len(self.eigbivs)):
+            self.eigbivs[i] = Motor*self.eigbivs[i]*~Motor
+
+        # Apply the rigid transformation to the eigenvectors using the motor
+        for i in range(len(self.eigvecs)):
+            self.eigvecs[i] = Motor*self.eigvecs[i]*~Motor
+
+        self.translation_vector = t_new
+        self.rotation_matrix = R_new
+        self.Motor = Motor_new
+        _,self.Rotor = decompose_motor(Motor)
+
+        self.redraw_geometries(scene,material,transp_mat)
+
+    def update_point_cloud(self):
+        '''Computes the rigid transformation (Motor) and applies it to the points and the primitives
+           Computes a Motor. Applies the new transformation composed with the adjoint of the old.'''
+
+        Motor = self.compute_motor()
+        self.apply_motor(Motor*~self.Motor)
 
 
-
-        self.translation_vector = t
-        self.rotation_matrix = R
-        self.Motor = Motor_old
-        self.Rotor = Rotor
-
+    def redraw_geometries(self,scene,material,transp_mat):
+        ''' Redraws the point cloud and its geometries'''
         self.compute_geometry_from_eigmvs() # Recompute geometries
         self.draw_geometries(scene,material,transp_mat)
         self.update_noisy_pcd(scene,material)
     
+    def apply_motor(self,Motor):
+        ''' Applies a rigid transformation to the point clouds and the eigenmultivectors '''
+        t_vec,R_matrix = self.motor_to_rotation_translation(Motor) # Get rotation matrix and translation
+
+        # Apply the rigid transformation to the eigenbivectors using the motor
+        for i in range(len(self.eigbivs)):
+            self.eigbivs[i] = Motor*self.eigbivs[i]*~Motor
+
+        # Apply the rigid transformation to the eigenvectors using the motor
+        for i in range(len(self.eigvecs)):
+            self.eigvecs[i] = Motor*self.eigvecs[i]*~Motor
+
+        data = [self.pcd,self.noisy_pcd]
+        for i in range(len(data)):
+            data[i].rotate(R_matrix,center=np.array([0,0,0])) # Do not forget the center!!!
+            data[i].translate(t_vec)
+
+        # Important to always 'normalise' the motor, otherwise the values tend to explode
+        self.Motor = project_motor(Motor*self.Motor) # Project to the motor manifold
+
+
+
+
     def compute_eigmvs(self):
-        '''Computes the eigenmultivectors associated to the point cloud'''
+        '''Computes the eigenmultivectors associated to the noisy point cloud'''
         x_pts = np.asarray(self.noisy_pcd.points)
     
         # Convert numpy array to multivector array
@@ -324,9 +382,11 @@ class PointCloudSettings:
 
         # disambiguate the sign of the eigenmultivectors 
         ref = compute_reference(p)
-        # print(ref)
         for i in range(len(self.eigmvs)):
             self.eigmvs[i] *= np.sign((self.eigmvs[i]*ref)(0))
+
+        # Separate the eigenmultivectors into bivector and vector
+        self.eigbivs,self.eigvecs = separate_grades(self.eigmvs)
             
 
     def compute_geometry_from_eigmvs(self):
@@ -339,21 +399,23 @@ class PointCloudSettings:
             self.geometries[i] = []
             self._transp_mat[i] = []
 
-        for i in range(len(self.eigmvs)):
-            d,l,radius_sq = get_properties(self.eigmvs[i])
-            
+        # Build the geometries for the spheres
+        for i in range(len(self.eigvecs)):
+            d,l,radius_sq = get_properties(self.eigvecs[i])
             d_array = np.array(d)
-            if((d_array*d_array).sum() < 1E-12): # check if is sphere
-                sphere = self.get_sphere(radius_sq,l)
-                self.geometries[0] += [sphere]
-            else: # if is circle
-                A,B,C,D = get_coeffs(self.eigmvs[i]) # compute the arrows from the circles
-                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
-                circle_geometries = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
-                
-                self.geometries[1] += circle_geometries
-                self.geometries[2] += [arrow]
-                self._transp_mat[1] += [True,True,False] # Solid 2D torus, transparent circles
+            sphere = self.get_sphere(radius_sq,l)
+            self.geometries[0] += [sphere]
+
+        # Build the geometries for the arrows and for the circles
+        for i in range(len(self.eigbivs)):
+            d,l,radius_sq = get_properties(self.eigbivs[i])
+            A,B,C,D = get_coeffs(self.eigbivs[i]) # compute the arrows from the circles
+            arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
+            circle_geometries = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
+            
+            self.geometries[1] += circle_geometries
+            self.geometries[2] += [arrow]
+            self._transp_mat[1] += [True,True,False] # Solid 2D torus, transparent circles
 
         self._transp_mat[0] = [True]*len(self.geometries[0]) # Transparent spheres
         self._transp_mat[2] = [False]*len(self.geometries[2]) # Solid arrows
@@ -708,8 +770,6 @@ class AppWindow:
         grid.add_child(self._shader)
         grid.add_child(gui.Label("Material"))
         grid.add_child(self._material_prefab)
-        # grid.add_child(gui.Label("Color"))
-        # grid.add_child(self._material_color)
         grid.add_child(gui.Label("Point size"))
         grid.add_child(self._point_size)
         material_settings.add_child(grid)
@@ -752,6 +812,9 @@ class AppWindow:
         self._show_point_cloud = gui.Checkbox("Point Cloud")
         self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
 
+        self._est_transformation = gui.Button("Estimate Rigid Transformation")
+        self._est_transformation.set_on_clicked(self._on_est_transformation)
+
         self._draw_spheres = gui.Button("Spheres")
         self._draw_circles = gui.Button("Circles")
         self._draw_arrows = gui.Button("Arrows")
@@ -786,11 +849,11 @@ class AppWindow:
         grid.add_child(self._update_primitives)
         grid.add_child(self._show_point_cloud)
         grid.add_child(gui.TabControl())
+        grid.add_child(self._est_transformation)
 
         rts_settings.add_child(grid)
 
         grid = gui.VGrid(3,0.25*em)
-        # grid.add_child(gui.Label("Primitives"))
         grid.add_child(self._draw_spheres)
         grid.add_child(self._draw_circles)
         grid.add_child(self._draw_arrows)
@@ -880,6 +943,8 @@ class AppWindow:
         self.point_clouds = []
         self.pcd_index = 0
         self._draw_primitives = [True,False,True] # Default values (spheres,circles,arrows)
+        self.target_idx = 0
+        self.source_idx = 1
 
     def _apply_settings(self):
         bg_color = [
@@ -1129,22 +1194,26 @@ class AppWindow:
         else:
             self.rotation_axis = vec/np.sqrt((vec*vec).sum()) # Normalize to unity
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
         
     def _on_trans_axis(self, vec):
         self.translation_axis = vec
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_rot_angle(self,value):
         self.rotation_angle = value/180*np.pi # convert to radians
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
     def _on_trans_mag(self,value):
         self.translation_magnitude = value
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_gaussian_noise(self,value):
         self.sigma = value
@@ -1176,31 +1245,38 @@ class AppWindow:
         self._draw_primitives[2] = self._draw_arrows.is_on
         self.update_primitives_toggle()
 
-
-    def _on_point_cloud(self,name,index): 
-        self.pcd_index = index
-
+    def update_gui(self):
+        ''' Updates the variables and the values of the gui, with respect to the selected point cloud'''
         # Update the values of the variables
         self.rotation_axis = self.point_clouds[self.pcd_index].rotation_axis
         self.rotation_angle = self.point_clouds[self.pcd_index].rotation_angle
         self.translation_magnitude = self.point_clouds[self.pcd_index].translation_magnitude
         self.translation_axis = self.point_clouds[self.pcd_index].translation_axis
-        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
-
+        
         # Update the values of the gui elements
         self._rot_axis.vector_value = self.point_clouds[self.pcd_index].rotation_axis
         self._rot_angle.double_value = self.point_clouds[self.pcd_index].rotation_angle/np.pi*180
         self._trans_mag.double_value = self.point_clouds[self.pcd_index].translation_magnitude
         self._trans_axis.vector_value = self.point_clouds[self.pcd_index].translation_axis 
         color = self.point_clouds[self.pcd_index].color
+        # Set the gui color to the color of the selected point cloud
         self._point_cloud_color.color_value = gui.Color(color[0],color[1],color[2],color[3])
+        # set the checkbox to the value of the selected point cloud
+        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
+
+    def _on_point_cloud(self,name,index):
+        self.pcd_index = index
+        self.update_gui()
 
     def _on_show_point_cloud(self,checked):
         '''Redraw the point cloud and its corresponding geometries '''
         self.point_clouds[self.pcd_index].show = checked
         self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
         self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
-        
+    
+    def _on_est_transformation(self):
+        M_est = algs.estimate_transformation_0(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx])
+        self.point_clouds[self.source_idx].apply_motor(M_est) # Apply transformation to the source point cloud
 
     def _on_point_cloud_color(self,color):
         self.point_clouds[self.pcd_index].color = [ 
@@ -1209,9 +1285,7 @@ class AppWindow:
         self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def load(self, path):
-        # Gets a point cloud from a ply file
-        # Creates a copy (target pc)
-        # Creates two noisy copies (added gaussian noise)
+        ''' Reads a point cloud from path and creates two PointCloudSettings classes'''
 
         self._scene.scene.clear_geometry()
         pcd = o3d.io.read_point_cloud(path)
@@ -1235,12 +1309,8 @@ class AppWindow:
             point_cloud.update_noisy_pcd(self._scene.scene,self.settings.material)
             self.point_clouds += [point_cloud]
             self._point_cloud.add_item(str(i))
-
-
-        # Set the gui color to the color of the selected point cloud
-        self._point_cloud_color.color_value = gui.Color(color[self.pcd_index][0],color[self.pcd_index][1],color[self.pcd_index][2],color[self.pcd_index][3])
-        # set the checkbox to the value of the selected point cloud
-        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
+        
+        self.update_gui()
 
         bounds = self._scene.scene.bounding_box
         self._scene.setup_camera(60, bounds, bounds.get_center())
