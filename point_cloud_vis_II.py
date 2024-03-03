@@ -176,6 +176,28 @@ class Settings:
         # to another one, then come back, the old setting will still be there.
         self.material = self._materials[Settings.LIT]
 
+
+        self.set_transparent_material([0.9, 0.9, 0.9])
+
+    def set_transparent_material(self,color):
+        self.transp_mat = o3d.visualization.rendering.MaterialRecord()
+
+        self.transp_mat.shader = 'defaultLitTransparency'
+        # self.transp_mat.shader = 'defaultLitSSR'
+        self.transp_mat.base_color = color + [0.5]
+
+        self.transp_mat.base_roughness = 1
+        self.transp_mat.base_reflectance = 0.0
+        self.transp_mat.base_clearcoat = 0
+        self.transp_mat.thickness = 0
+        self.transp_mat.transmission = 0
+        self.transp_mat.absorption_distance = 0
+        self.transp_mat.absorption_color = [0,0,0]
+
+        
+        # return transp_mat
+
+
     def set_material(self, name):
         self.material = self._materials[name]
         self.apply_material = True
@@ -212,6 +234,7 @@ class PointCloudSettings:
         self.geometries = []
         self.ground_eigmvs = []
         self.eigmvs = []
+        self.show = True
 
     def compute_transformation(self): 
         ''' Determines the rotation matrix and translation matrix'''
@@ -224,12 +247,12 @@ class PointCloudSettings:
 
     def update_noisy_pcd(self,scene,material):
         '''Update the point cloud from a given scene'''
-
-        material.base_color = self.color
-        # self.compute_pcd_normals(i) # Do not update normals 
         scene.remove_geometry("noisy_pcd_" + str(self.id))
-        scene.add_geometry("noisy_pcd_" + str(self.id), self.noisy_pcd,
-                                                        material)
+        if self.show:
+            material.base_color = self.color
+            # self.compute_pcd_normals(i) # Do not update normals 
+            scene.add_geometry("noisy_pcd_" + str(self.id), self.noisy_pcd,
+                                                            material)
     def compute_pcd_normals(self):
         self.noisy_pcd.estimate_normals()
         self.noisy_pcd.normalize_normals()
@@ -248,8 +271,10 @@ class PointCloudSettings:
 
     
 
-    def update_point_cloud(self,scene,material):
-        
+    def update_point_cloud(self,scene,material,transp_mat):
+        '''Computes the rigid transformation and applies it to the points and the primitives
+           Computes a motor and rotation matrix '''
+
         t,R,Rotor = self.compute_transformation()
         
         t_old = vga3d.multivector(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
@@ -259,39 +284,29 @@ class PointCloudSettings:
         Motor_new = (1+(1/2)*einf*t_new)*Rotor
         
         Motor = Motor_new*~Motor_old
-        # Motor = Rotor
-         
-
-        data = [self.pcd,self.noisy_pcd]
-        # for i in range(len(self.geometries)-1):
-        #     data += self.geometries[i]
         
         # Rotate and translate the point cloud data
+        data = [self.pcd,self.noisy_pcd]
         for i in range(len(data)):
             data[i].translate(-self.translation_vector)
             data[i].rotate(R@self.rotation_matrix.T, center=np.array([0, 0, 0]))
-            # data[i].rotate(R, center=np.array([0, 0, 0]))
             data[i].translate(t)
         
-        # Also apply the rigid transformation to the eigenmultivectors
+        # Apply the rigid transformation to the eigenmultivectors using the motor
         for i in range(len(self.eigmvs)):
             self.eigmvs[i] = Motor*self.eigmvs[i]*~Motor
 
-        # data = self.geometries[2]
-        # for i in range(len(data)):
-        #     # Rotate arrows since these are translation invariant
-        #     data[i].rotate(self.rotation_matrix.T, center=np.array([0, 0, 0]))
-        #     data[i].rotate(R, center=np.array([0, 0, 0]))
+        # for i in range(len(self.eigmvs)):
+
+
 
         self.translation_vector = t
         self.rotation_matrix = R
         self.Motor = Motor_old
         self.Rotor = Rotor
-        # t = vga3d.multivector(t.tolist(),grades=1)
-        # self.Motor = (1+(1/2)*einf*t)*self.Rotor
 
         self.compute_geometry_from_eigmvs() # Recompute geometries
-        self.draw_geometries(scene,material)
+        self.draw_geometries(scene,material,transp_mat)
         self.update_noisy_pcd(scene,material)
     
     def compute_eigmvs(self):
@@ -316,37 +331,57 @@ class PointCloudSettings:
 
     def compute_geometry_from_eigmvs(self):
         self.geometries = [0]*3 # [sphere,circle,arrow]
+        # The boolean that decides which material are transparent
+        self._transp_mat = [0]*3 # [sphere,circle,arrow]
         
+        # A different list for each
         for i in range(len(self.geometries)):
             self.geometries[i] = []
+            self._transp_mat[i] = []
 
         for i in range(len(self.eigmvs)):
             d,l,radius_sq = get_properties(self.eigmvs[i])
-            A,B,C,D = get_coeffs(self.eigmvs[i])
-            sphere = self.get_sphere(radius_sq,l)
-            arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
-            circle_geometries = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
-            self.geometries[0] += [sphere]
-            self.geometries[1] += circle_geometries
-            self.geometries[2] += [arrow]
+            
+            d_array = np.array(d)
+            if((d_array*d_array).sum() < 1E-12): # check if is sphere
+                sphere = self.get_sphere(radius_sq,l)
+                self.geometries[0] += [sphere]
+            else: # if is circle
+                A,B,C,D = get_coeffs(self.eigmvs[i]) # compute the arrows from the circles
+                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
+                circle_geometries = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
+                
+                self.geometries[1] += circle_geometries
+                self.geometries[2] += [arrow]
+                self._transp_mat[1] += [True,True,False] # Solid 2D torus, transparent circles
 
-    def draw_geometries(self,scene,material):
+        self._transp_mat[0] = [True]*len(self.geometries[0]) # Transparent spheres
+        self._transp_mat[2] = [False]*len(self.geometries[2]) # Solid arrows
+
+    def draw_geometries(self,scene,material,transp_mat):
         material.base_color = self.color
+        # print(self.color[:2])
+        # print(type(self.color))
+
+        transp_mat.base_color = np.r_[self.color[:3],0.5]
+        # transp_mat.base_color[3] = 0.5 # Set alpha to 0.5
         self.remove_geometries(scene)
-        for i in range(len(self.geometries)):
-            if self._draw_geometries[i]:
-                for j in range(len(self.geometries[i])):
-                    scene.add_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j),self.geometries[i][j],material)
+        if self.show:
+            for i in range(len(self.geometries)):
+                if self._draw_geometries[i]:
+                    for j in range(len(self.geometries[i])):
+                        _material = transp_mat if self._transp_mat[i][j] else material # check if material is transparent
+                        scene.add_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j),self.geometries[i][j],_material)
         
     def remove_geometries(self,scene):
         for i in range(len(self.geometries)):
             for j in range(len(self.geometries[i])):
                 scene.remove_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j))
 
-    def update_geometries(self,scene,material):
+    def update_geometries(self,scene,material,transp_mat):
         self.compute_eigmvs()
         self.compute_geometry_from_eigmvs()
-        self.draw_geometries(scene,material)
+        self.draw_geometries(scene,material,transp_mat)
 
     def get_sphere(self,radius_sq,location):
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=np.sqrt(abs(radius_sq)),resolution=20)
@@ -714,6 +749,9 @@ class AppWindow:
         self._update_primitives = gui.Button("Update Primitives")
         self._update_primitives.set_on_clicked(self._on_update_primitives)
         
+        self._show_point_cloud = gui.Checkbox("Point Cloud")
+        self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
+
         self._draw_spheres = gui.Button("Spheres")
         self._draw_circles = gui.Button("Circles")
         self._draw_arrows = gui.Button("Arrows")
@@ -746,6 +784,7 @@ class AppWindow:
         grid.add_child(gui.Label("Gaussian Noise"))
         grid.add_child(self._gaussian_noise)
         grid.add_child(self._update_primitives)
+        grid.add_child(self._show_point_cloud)
         grid.add_child(gui.TabControl())
 
         rts_settings.add_child(grid)
@@ -830,7 +869,7 @@ class AppWindow:
 
         self._apply_settings()
         
-        
+    
 
     def benchmark_init(self):
         self.sigma = 0
@@ -1090,22 +1129,22 @@ class AppWindow:
         else:
             self.rotation_axis = vec/np.sqrt((vec*vec).sum()) # Normalize to unity
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
         
     def _on_trans_axis(self, vec):
         self.translation_axis = vec
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_rot_angle(self,value):
         self.rotation_angle = value/180*np.pi # convert to radians
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
     def _on_trans_mag(self,value):
         self.translation_magnitude = value
         self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
-        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].update_point_cloud(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_gaussian_noise(self,value):
         self.sigma = value
@@ -1115,15 +1154,15 @@ class AppWindow:
 
     def _on_update_primitives(self):
         for i in range(len(self.point_clouds)):
-            self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material)
+            self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
-        for i in range(len(self.point_clouds[0].eigmvs)):
-            print(pyga.numpy_max(self.point_clouds[0].eigmvs[i] - self.point_clouds[1].eigmvs[i]))
+        # for i in range(len(self.point_clouds[0].eigmvs)):
+        #     print(pyga.numpy_max(self.point_clouds[0].eigmvs[i] - self.point_clouds[1].eigmvs[i]))
 
     def update_primitives_toggle(self):
         for i in range(len(self.point_clouds)):
             self.point_clouds[i]._draw_geometries = self._draw_primitives
-            self.point_clouds[i].draw_geometries(self._scene.scene,self.settings.material)
+            self.point_clouds[i].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_draw_spheres(self):
         self._draw_primitives[0] = self._draw_spheres.is_on
@@ -1146,6 +1185,7 @@ class AppWindow:
         self.rotation_angle = self.point_clouds[self.pcd_index].rotation_angle
         self.translation_magnitude = self.point_clouds[self.pcd_index].translation_magnitude
         self.translation_axis = self.point_clouds[self.pcd_index].translation_axis
+        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
 
         # Update the values of the gui elements
         self._rot_axis.vector_value = self.point_clouds[self.pcd_index].rotation_axis
@@ -1155,12 +1195,18 @@ class AppWindow:
         color = self.point_clouds[self.pcd_index].color
         self._point_cloud_color.color_value = gui.Color(color[0],color[1],color[2],color[3])
 
+    def _on_show_point_cloud(self,checked):
+        '''Redraw the point cloud and its corresponding geometries '''
+        self.point_clouds[self.pcd_index].show = checked
+        self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        
 
     def _on_point_cloud_color(self,color):
         self.point_clouds[self.pcd_index].color = [ 
             color.red, color.green, color.blue, color.alpha ]
         self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
-        self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def load(self, path):
         # Gets a point cloud from a ply file
@@ -1185,14 +1231,17 @@ class AppWindow:
             point_cloud.update_gaussian_noise(self.sigma)
             point_cloud.color = color[i]
             point_cloud._draw_geometries = self._draw_primitives
+            point_cloud.show = True
             point_cloud.update_noisy_pcd(self._scene.scene,self.settings.material)
             self.point_clouds += [point_cloud]
             self._point_cloud.add_item(str(i))
 
 
-        # Set the gui color to the color of the first PC
+        # Set the gui color to the color of the selected point cloud
         self._point_cloud_color.color_value = gui.Color(color[self.pcd_index][0],color[self.pcd_index][1],color[self.pcd_index][2],color[self.pcd_index][3])
-        
+        # set the checkbox to the value of the selected point cloud
+        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
+
         bounds = self._scene.scene.bounding_box
         self._scene.setup_camera(60, bounds, bounds.get_center())
 

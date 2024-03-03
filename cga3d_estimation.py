@@ -384,6 +384,27 @@ def get_3dcga_eigmvs(p,grades=[1,2]):
     
     return (P_lst,lambda_P)
 
+def is_bivector(P):
+    ''' Checks if a single multivector is a bivector.
+        It only compares to the vector components of itself.
+    '''
+    a = pyga.numpy_max(P(1))
+    b = pyga.numpy_max(P(2))
+    return a > b
+
+def separate_grades(P):
+    ''' Separates the eigenmultivectors to bivector and vector grades.
+        This assumes that there are no mixed grade eigenmultivectors.
+    '''
+    P_biv = []
+    P_vec = []
+    for i in range(len(P)):
+        if pyga.numpy_max(P[i](1)) < pyga.numpy_max(P[i](2)): # Check if is bivector
+            P_biv += [P[i](2)]
+        else:
+            P_vec += [P[i](1)]
+    return P_biv,P_vec
+
 def compute_reference(p):
     p_ref = p.sum()
     p_ref /= (p_ref|einf)(0)
