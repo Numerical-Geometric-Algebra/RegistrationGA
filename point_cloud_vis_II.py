@@ -364,8 +364,7 @@ class PointCloudSettings:
         # Important to always 'normalise' the motor, otherwise the values tend to explode
         self.Motor = project_motor(Motor*self.Motor) # Project to the motor manifold
 
-
-
+    
 
     def compute_eigmvs(self):
         '''Computes the eigenmultivectors associated to the noisy point cloud'''
@@ -381,9 +380,9 @@ class PointCloudSettings:
         self.eigmvs,self.eigvalues = get_3dcga_eigmvs(p)
 
         # disambiguate the sign of the eigenmultivectors 
-        ref = compute_reference(p)
+        self.mvref = compute_reference(p)
         for i in range(len(self.eigmvs)):
-            self.eigmvs[i] *= np.sign((self.eigmvs[i]*ref)(0))
+            self.eigmvs[i] *= np.sign((self.eigmvs[i]*self.mvref)(0))
 
         # Separate the eigenmultivectors into bivector and vector
         self.eigbivs,self.eigvecs = separate_grades(self.eigmvs)
@@ -439,6 +438,19 @@ class PointCloudSettings:
         for i in range(len(self.geometries)):
             for j in range(len(self.geometries[i])):
                 scene.remove_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j))
+    
+    def update_axis_angle_from_motor(self):
+        t,a,theta = motor_to_axis_angle(self.Motor)
+        t_normalized = pyga.normalize_mv(t)
+
+        self.translation_vector = np.array(t.tolist(1)[0][:3])
+        self.translation_axis = np.array(t_normalized.tolist(1)[0][:3])
+        self.translation_magnitude = (t_normalized|t)(0)
+        self.rotation_axis = np.array(a.tolist(1)[0][:3])
+        self.rotation_angle = theta*2
+        print("trans vector",t)
+        print("rot axis",a)
+        print("rot angle",theta)
 
     def update_geometries(self,scene,material,transp_mat):
         self.compute_eigmvs()
@@ -812,7 +824,7 @@ class AppWindow:
         self._show_point_cloud = gui.Checkbox("Point Cloud")
         self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
 
-        self._est_transformation = gui.Button("Estimate Rigid Transformation")
+        self._est_transformation = gui.Button("Est. Motor")
         self._est_transformation.set_on_clicked(self._on_est_transformation)
 
         self._draw_spheres = gui.Button("Spheres")
@@ -848,8 +860,8 @@ class AppWindow:
         grid.add_child(self._gaussian_noise)
         grid.add_child(self._update_primitives)
         grid.add_child(self._show_point_cloud)
-        grid.add_child(gui.TabControl())
         grid.add_child(self._est_transformation)
+        grid.add_child(gui.TabControl())
 
         rts_settings.add_child(grid)
 
@@ -1245,24 +1257,27 @@ class AppWindow:
         self._draw_primitives[2] = self._draw_arrows.is_on
         self.update_primitives_toggle()
 
-    def update_gui(self):
-        ''' Updates the variables and the values of the gui, with respect to the selected point cloud'''
+    def update_gui_variables(self,index):
         # Update the values of the variables
-        self.rotation_axis = self.point_clouds[self.pcd_index].rotation_axis
-        self.rotation_angle = self.point_clouds[self.pcd_index].rotation_angle
-        self.translation_magnitude = self.point_clouds[self.pcd_index].translation_magnitude
-        self.translation_axis = self.point_clouds[self.pcd_index].translation_axis
+        self.rotation_axis = self.point_clouds[index].rotation_axis
+        self.rotation_angle = self.point_clouds[index].rotation_angle
+        self.translation_magnitude = self.point_clouds[index].translation_magnitude
+        self.translation_axis = self.point_clouds[index].translation_axis
         
         # Update the values of the gui elements
-        self._rot_axis.vector_value = self.point_clouds[self.pcd_index].rotation_axis
-        self._rot_angle.double_value = self.point_clouds[self.pcd_index].rotation_angle/np.pi*180
-        self._trans_mag.double_value = self.point_clouds[self.pcd_index].translation_magnitude
-        self._trans_axis.vector_value = self.point_clouds[self.pcd_index].translation_axis 
-        color = self.point_clouds[self.pcd_index].color
+        self._rot_axis.vector_value = self.point_clouds[index].rotation_axis
+        self._rot_angle.double_value = self.point_clouds[index].rotation_angle/np.pi*180
+        self._trans_mag.double_value = self.point_clouds[index].translation_magnitude
+        self._trans_axis.vector_value = self.point_clouds[index].translation_axis 
+        color = self.point_clouds[index].color
         # Set the gui color to the color of the selected point cloud
         self._point_cloud_color.color_value = gui.Color(color[0],color[1],color[2],color[3])
         # set the checkbox to the value of the selected point cloud
-        self._show_point_cloud.checked = self.point_clouds[self.pcd_index].show
+        self._show_point_cloud.checked = self.point_clouds[index].show
+
+    def update_gui(self):
+        ''' Updates the variables and the values of the gui, with respect to the selected point cloud'''
+        self.update_gui_variables(self.pcd_index)
 
     def _on_point_cloud(self,name,index):
         self.pcd_index = index
@@ -1275,8 +1290,16 @@ class AppWindow:
         self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
     def _on_est_transformation(self):
-        M_est = algs.estimate_transformation_0(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx])
-        self.point_clouds[self.source_idx].apply_motor(M_est) # Apply transformation to the source point cloud
+        if len(self.point_clouds) >= 2:
+            for i in [self.source_idx,self.target_idx]: # update the eigenmultivectors of the source and target point clouds
+                self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+            M_est = algs.estimate_transformation_0(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx])
+            # print(M_est)
+            self.point_clouds[self.source_idx].apply_motor(M_est) # Apply transformation to the source point cloud
+            self.point_clouds[self.source_idx].update_axis_angle_from_motor()
+            if self.source_idx == self.pcd_index: # Update gui when the source point cloud is selected 
+                self.update_gui_variables(self.source_idx)
+            self.point_clouds[self.source_idx].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def _on_point_cloud_color(self,color):
         self.point_clouds[self.pcd_index].color = [ 

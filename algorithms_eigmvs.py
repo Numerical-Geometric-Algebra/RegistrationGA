@@ -9,12 +9,10 @@ def get_algorithm_name(algorithm):
 def estimate_transformation_0(source,target):
     '''CGA ExactTRS '''
     s = 2 # Consider the two eigenbivectors with the smallest eigenvalue
-
-    P_biv = source.eigbivs
-    Q_biv = target.eigbivs
-
-    P_vec = source.eigvecs
-    Q_vec = target.eigvecs
+    
+    # Get the eigenmultivectors and the reference
+    P_biv,P_vec,P_ref = source.eigbivs,source.eigvecs,source.mvref
+    Q_biv,Q_vec,Q_ref = target.eigbivs,target.eigvecs,target.mvref
 
     P_biv = mv.concat(P_biv[s:])
     Q_biv = mv.concat(Q_biv[s:])

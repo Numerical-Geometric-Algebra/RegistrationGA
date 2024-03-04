@@ -316,6 +316,19 @@ def axis_angle_to_rotor(axis,angle):
     Rotor = np.cos(angle/2) + I*v*np.sin(angle/2)
     return Rotor
 
+def motor_to_axis_angle(Motor):
+    eps = 1e-100
+    T,R = decompose_motor(Motor)
+    t = -2*(eo|T)
+    theta = np.arctan2(pyga.mag_mv(R(2)),R(0))
+    if abs(theta) < eps  or abs(theta - np.pi) < eps: # 0 rotation or 
+        # Chose arbitrary axis of rotation 
+        a = e1
+    else:
+        a = ~I*R(2)/pyga.mag_mv(R(2))
+    a = pyga.normalize_mv(a)
+    return t,a,theta
+
 def rotor3d_to_matrix(Rotor):
     basis,rec_basis = get_3dvga_basis(1)
     R_matrix = multiga.get_matrix(lambda x: Rotor*x*~Rotor,basis,rec_basis).T
