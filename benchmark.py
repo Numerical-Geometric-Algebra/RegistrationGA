@@ -188,8 +188,8 @@ if __name__ == '__main__':
     save_data = True
 
     # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
+    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
+    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
 
     pcd = o3d.io.read_point_cloud(filename)
     pts = np.asarray(pcd.points)
@@ -236,16 +236,16 @@ if __name__ == '__main__':
     # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_varpos"
 
     ''' Defining a random trajectory'''
-    # trajectory = True
-    # niters = 1
-    # ###### Rotation angle and translation increments for each experience
-    # rotangle = 10
-    # tscaling = 0.01
-    # n_exps = 10
-    # sigmas = 0.01
-    # x_axis = np.arange(n_exps)
-    # xlabel_str = "Iteration"
-    # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory_"
+    trajectory = True
+    niters = 1000
+    ###### Rotation angle and translation increments for each experience
+    rotangle = 10
+    tscaling = 0.01
+    n_exps = 30
+    sigmas = 0.01
+    x_axis = np.arange(n_exps)
+    xlabel_str = "Iteration"
+    fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory_"
 
     '''DUMMY experiments'''
     # niters = 1
@@ -269,10 +269,10 @@ if __name__ == '__main__':
     # xlabel_str = r'Noise ($\sigma$)'
     # fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
 
-    # experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
-    # benchmark_values = run_experiments(pts,experiments,algorithms)
+    experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
+    benchmark_values = run_experiments(pts,experiments,algorithms)
     
-    # filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+    filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
     
     # with open(filename_bench, "rb") as f:
     #     dct = pickle.load(f)
@@ -285,12 +285,12 @@ if __name__ == '__main__':
         print("Experiment",i,"for histogram")
         sigmas = sigmas_lst[i]
         print("sigma =",sigmas)
-        fig_name_end = "sigma_" + str(sigmas).replace('.','_')
+        fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_"
         niters = 1000
         experiments = get_experiments(n_exps=1,niters=niters,sigma=sigmas,tscaling=1,rotangle=None,noutliers=0,maxoutlier=0,trajectory=False)
         benchmark_values = run_single_experiment(pts,experiments[0],algorithms)
         filename_pickle = save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigmas)
         
-        with open(filename_pickle, "rb") as f:
-            dct = pickle.load(f)
-        plot_histogram(dct) # creates an histogram for the data and saves in a file
+        # with open(filename_pickle, "rb") as f:
+        #     dct = pickle.load(f)
+        # plot_histogram(dct) # creates an histogram for the data and saves in a file

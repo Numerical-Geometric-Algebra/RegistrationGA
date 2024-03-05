@@ -349,6 +349,20 @@ def rotmatrix_to_3drotor(rot_matrix):
 
     return pyga.rotor_sqrt(rotor)
 
+def motor_to_rotation_translation(Motor):
+    ''' Takes a motor and computes the rotation matrix and translation vector'''
+    T,R = decompose_motor(Motor)
+    t_vec = np.array((-2*(eo|T)).tolist(1)[0][:3])
+    R_matrix = rotor3d_to_matrix(R)
+    return t_vec,R_matrix
+
+def rotation_translation_to_motor(R_matrix,t_vec):
+    '''Takes a rotation and translation and computes a motor '''
+    R = rotmatrix_to_3drotor(R_matrix) # Converts a rotation matrix into a rotor
+    t = nparray_to_3dvga_vector_array(t_vec) # Converts a vector in numpy to a vector in VGA
+    T = 1 + (1/2)*einf*t # Computes the translator
+    return T*R # Returns the motor
+
 def estimate_rot_SVD(p,q):
     basis = [e1,e2,e3]
 

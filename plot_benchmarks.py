@@ -14,11 +14,14 @@ from algorithms import get_algorithm_name
 ratio = [735,500]
 scale = 0.007
 legend = True
-    
+
+
 # Two consecutive figures. Ratios:
 # ratio = [822,583]
 # scale = 0.007
 # legend = True
+
+
 
 filled_marker_style = dict(marker='o', linestyle=':', markersize=7,
                            color='darkgrey',
@@ -135,7 +138,7 @@ def plot_experiments_3(bench,x_axis,title,xlabel_str,algorithms,marker_style,cap
         plt.plot(x_axis,bench_mean.T[i],label=get_algorithm_name(algorithms[i]),fillstyle='full',**marker_style)
 
     plt.xlabel(xlabel_str)
-    plt.ylabel(title + "  (Mean)")
+    plt.ylabel(title)
 
     
     legend_savefig(fig_name,plt,legend=legend,legend_in=True)
@@ -194,18 +197,121 @@ def plot_experiments_5(bench_rot,bench_pos,x_axis,rot_worst_label,pos_worst_labe
 
     legend_savefig(fig_name,ax1,legend_in=True,legend=legend)
 
-def set_font_size():
-    SMALL_SIZE = 14
-    MEDIUM_SIZE = 14
-    BIGGER_SIZE = 14
+def plot_axis(ax,yaxis,yerror,xaxis,colors,capsize,alg_names,marker_style):
+    ''' Plots the data into some ax '''
+    n = len(alg_names)
+    for i in range(n):
+        marker_style['markerfacecolor'] = colors[i]
+        marker_style['color'] = colors[i]
+        marker_style['markeredgecolor'] = lighten_color(colors[i],amount=1.3)
+        ax.errorbar(xaxis,yaxis.T[i],yerror.T[i],fillstyle='full',capsize=capsize,fmt='none',color=colors[i])
+        ax.plot(xaxis,yaxis.T[i],label=alg_names[i],fillstyle='full',**marker_style)
 
-    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
-    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-    plt.rc('axes', labelsize=18)    # fontsize of the x and y labels
+
+    
+
+    
+
+def plot_experiments_666(dcts,titles,nbins=30,rot_range=None,pos_range=None):
+    ratio = [2275,610]
+    dpi = 96
+
+    if pos_range is None:
+        pos_range = []
+        for i in range(len(dcts)):
+            pos_range += [None]
+
+    if rot_range is None:
+        rot_range = []
+        for i in range(len(dcts)):
+            rot_range += [None]
+    
+    set_font_size(20,22,26)
+    algorithms = dcts[0]["algorithms"]
+    colors = [np.array([249, 99, 0])/255,np.array([0, 150, 249])/255]
+    
+    alg_names = []
+    for i in range(len(algorithms)):
+        alg_names += [get_algorithm_name(algorithms[i])]
+
+    fig, axarr = plt.subplots(2,len(dcts),figsize=(ratio[0]/dpi,ratio[1]/dpi),dpi=dpi)
+
+    for i in range(len(dcts)):
+        axarr[0][i].hist(dcts[i]["bench_rot"].T,nbins,histtype='bar',label=alg_names,color=colors,range=rot_range[i],density=True)
+        axarr[1][i].hist(dcts[i]["bench_pos"].T,nbins,histtype='bar',label=alg_names,color=colors,range=pos_range[i],density=True)
+        axarr[0][i].set_title(titles[i],size=26)
+        axarr[0][i].set_xlabel(r"RRE ($\degree$)")
+        axarr[1][i].set_xlabel(r"RTE ($m$)")
+        axarr[0][i].ticklabel_format(axis='both', style='sci', scilimits=(0,0))
+        axarr[1][i].ticklabel_format(axis='both', style='sci', scilimits=(0,0))
+
+    axarr[0][3].legend()
+    axarr[0][0].set_ylabel(r"Prob. density")
+    axarr[1][0].set_ylabel(r"Prob. density")
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.93,bottom=0.135,left=0.038,right=0.987,hspace=0.482,wspace=0.11)
+    plt.show()
+
+
+def plot_experiments_9999(dcts,titles):
+    # plt.style.use('dark_background')
+    ratio = [2275,610]
+    dpi = 96
+    print(dcts[0]["xlabel_str"])
+    algorithms = dcts[0]["algorithms"]
+
+    set_font_size(20,24,26)
+
+    fig, axarr = plt.subplots(2,len(dcts),sharex=True,figsize=(ratio[0]/dpi,ratio[1]/dpi),dpi=dpi)
+    alg_names = []
+    for i in range(len(algorithms)):
+        alg_names += [get_algorithm_name(algorithms[i])]
+    colors = cm.rainbow(np.linspace(0, 1, len(algorithms)))
+    # colors = [np.array([249, 99, 0])/255,np.array([0, 150, 249])/255]
+    capsize = 3.0
+
+    # end = dcts[i]["x_axis"].max()
+    # stepsize = 0.005
+    # xticks = np.arange(0, end+0.0001, stepsize)
+    
+    for i in range(len(dcts)):
+        plot_axis(axarr[0][i],dcts[i]["bench_rot"][2],dcts[i]["bench_rot"][3],dcts[i]["x_axis"],colors,capsize,alg_names,filled_marker_style)
+        plot_axis(axarr[1][i],dcts[i]["bench_pos"][2],dcts[i]["bench_pos"][3],dcts[i]["x_axis"],colors,capsize,alg_names,filled_marker_style)
+        axarr[1][i].ticklabel_format(axis='y', style='sci', scilimits=(-3,-6))
+        axarr[1][i].set_xlabel(dcts[i]["xlabel_str"])
+        # axarr[1][i].set_xticks(xticks)
+        axarr[0][i].set_title(titles[i],size=26)
+        
+
+    
+    axarr[0][1].legend()
+
+    axarr[0][0].set_ylabel(r"RRE ($\degree$)")
+    axarr[1][0].set_ylabel(r"RTE (m)")
+
+    
+        
+    # plt.grid()
+
+    # axarr[0][1].ticklabel_format(axis='y', style='sci', scilimits=(-3,-6))
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.937,bottom=0.12,left=0.044,right=0.995,hspace=0.16,wspace=0.093)
+    # loc='upper center', bbox_to_anchor=(0.5, 1.4),ncol=1, fancybox=True, shadow=True
+
+    plt.show()
+
+
+def set_font_size(SMALL_SIZE = 14,MEDIUM_SIZE = 14,BIGGER_SIZE = 14):
+
+    plt.rc('font', size=SMALL_SIZE)          # default text sizes
+    plt.rc('axes', titlesize=SMALL_SIZE)     # axes title
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # xtick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # ytick labels
+    plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend 
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # figure title
+    plt.rc('axes', labelsize=SMALL_SIZE)     # x and y labels
 
 def check_if_in_list(a,list):
     for i in range(len(list)):
@@ -237,8 +343,9 @@ def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None):
     fig,(ax1,ax2) = plt.subplots(2,figsize=(ratio[0]*scale, ratio[1]*scale))
 
     # Plot translation
-    ax1.hist(bench_pos.T,nbins,histtype='bar',label=label,color=color,density=True,range=pos_range)
+    ax1.hist(bench_pos.T,nbins,histtype='bar',label=label,color=color,range=pos_range)
     ax1.set_xlabel("Translation Error (m)")
+    ax1.set_ylabel("Frequency")
     ax1.legend()
 
 
@@ -253,8 +360,9 @@ def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None):
     
 
     # Plot rotation
-    ax2.hist(bench_rot.T,nbins,histtype='bar',label=label,color=color,density=True,range=rot_range)
+    ax2.hist(bench_rot.T,nbins,histtype='bar',label=label,color=color,range=rot_range)
     ax2.set_xlabel(r"Rotation Error ($\degree$)")
+    ax2.set_ylabel("Frequency")
     # ax2.legend()
 
 
@@ -316,6 +424,52 @@ def filter_dictionary(dct,alg_names):
 
     return dct
     
+def plot_multiple_benchmarks():
+    
+    alg_names = ["ICP","CGA eigmvs","PASTA 3D"]
+    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_28_02_2024_21_58_51.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"]
+    
+    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_bun_zipper_res2_05_03_2024_04_06_37.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_dragonMouth5_0_05_03_2024_16_11_04.pickle"]
+
+    titles = ["Bunny","Armadillo","Dragon"]
+    dcts = []
+    for i in range(len(filenames)):
+        with open(filenames[i], "rb") as f:
+            dct = pickle.load(f)
+        dct = filter_dictionary(dct,alg_names)
+        dcts += [dct]
+
+    plot_experiments_9999(dcts,titles)
+
+
+def plot_multiple_histograms():
+    alg_names = ["VGA CeofMass","CGA eigmvs"]
+
+    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01_ArmadilloBack_0_05_03_2024_10_52_47.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_02_ArmadilloBack_0_05_03_2024_11_14_47.pickle"]
+
+    titles = [r"$\sigma=0.001$",r"$\sigma=0.005$",r"$\sigma=0.01$",r"$\sigma=0.02$"]
+
+    rot_range = [None,None,(0,0.8),(0,2)]
+    pos_range = [None,None,(0,0.0015),(0,0.0035)]
+
+    # rot_range = [None,None,(179,180),(178,180)]
+    # pos_range = None
+
+    dcts = []
+    for i in range(len(filenames)):
+        with open(filenames[i], "rb") as f:
+            dct = pickle.load(f)
+        dct = filter_dictionary_single_exp(dct,alg_names)
+        dcts += [dct]
+
+    plot_experiments_666(dcts,titles,pos_range=pos_range,rot_range=rot_range)
     
 
 def plot_benchmarks(dct,show_plot=False):
@@ -339,8 +493,8 @@ def plot_benchmarks(dct,show_plot=False):
     # pos_error_str = r"$\|\mathbf{t} - \hat{\mathbf{t}}\|$"
     # posangle_error_str = r"$\arccos(\widehat{\mathbf{t}}\cdot\hat{\mathbf{t}})$ ($\degree$)"
 
-    angle_error_str = r"Error ($\degree$)"
-    pos_error_str = r"Error (m)"
+    angle_error_str = r"RRE ($\degree$)"
+    pos_error_str = r"RTE (m)"
     if show_plot:
         rot_file_name = None
         pos_file_name = None
@@ -364,25 +518,37 @@ def plot_benchmarks(dct,show_plot=False):
     # plot_experiments_5(bench_rot,bench_pos,x_axis,angle_error_str,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,worst_filename)
 
 if __name__ == "__main__":
-    alg_names = ["VGA CeofMass","CGA exactTRS"]
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_01_03_2024_04_03_08.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_12_59_02.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
-    dct = filter_dictionary(dct,alg_names)
-    plot_benchmarks(dct)
+    alg_names = ["CGA eigmvs","VGA CeofMass"]
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_01_03_2024_04_03_08.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_12_59_02.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"
     
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_01_03_2024_04_20_19.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_29_02_2024_13_00_45.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01ArmadilloBack_0_29_02_2024_02_28_25.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01dragonMouth5_0_29_02_2024_07_32_06.pickle"
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
-    dct = filter_dictionary_single_exp(dct,alg_names)
-    # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
-    plot_histogram(dct,nbins=100)
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle"
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
+    # dct = filter_dictionary(dct,alg_names)
+    # plot_benchmarks(dct)
+    
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_01_03_2024_04_20_19.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_29_02_2024_13_00_45.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01ArmadilloBack_0_29_02_2024_02_28_25.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01dragonMouth5_0_29_02_2024_07_32_06.pickle"
+    
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_02_ArmadilloBack_0_05_03_2024_11_14_47.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle"
+    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
+    # dct = filter_dictionary_single_exp(dct,alg_names)
+    # # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
+    # # plot_histogram(dct,nbins=30,rot_range=(0,3.5),pos_range=(0,0.01))
+    # # plot_histogram(dct,nbins=30,rot_range=(0,2),pos_range=(0,0.003))
+    # plot_histogram(dct,nbins=30)
 
-    plt.show()
+    # plt.show()
+
+
+    plot_multiple_benchmarks()
+    # plot_multiple_histograms()
 

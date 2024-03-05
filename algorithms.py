@@ -170,7 +170,7 @@ def estimate_transformation_13(x,y,npoints):
 
 
 def estimate_transformation_14(x,y,npoints):
-    '''CGA exactTRS
+    '''CGA eigmvs
         Estimates the rigid body motion between two point clouds using the eigenmultivector.
         From the eigenmultivectors we estimate the rotation and translation. 
         To estimate the sign we use references from the PCs directly.
