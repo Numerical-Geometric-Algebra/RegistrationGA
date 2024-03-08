@@ -19,6 +19,12 @@ basis = ga.basis()
 locals().update(basis)
 
 '''
+    This script tests the decomposition of a symmetric linear transformation. The algorithm takes a linear
+    function defined in a geometric algebra, then converts it to a matrix and uses numpy to find the decomposition.
+    
+    IMPORTANT: When the multiplicity is greater than one we form blades A = a1^a2^...^ak from the eigenvectors with
+               the same eigenvalues. This provides a unique decomposition!!!
+
 For algebras with negative signature sometimes the decomposition cannot find all the eigenblades associated with
 the symmetric function. We presume that happens when the eigenblades are null blades.  
 Null blades act as projections to zero. Only reciprocal vectors are affected by these blades. 

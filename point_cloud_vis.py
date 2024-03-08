@@ -1,508 +1,463 @@
-#!/usr/bin/env python
+import glob
+import numpy as np
 import open3d as o3d
 import open3d.visualization.gui as gui
-import numpy as np
-import copy
-from scipy.spatial.transform import Rotation
+import open3d.visualization.rendering as rendering
+import os
+import platform
+
 from cga3d_estimation import *
-import algorithms
+import algorithms_pcviz as algs
 import multilinear_algebra as multiga
 
-import os, pickle
-from pathlib import Path
+import sys
+import copy
+from matplotlib.pyplot import cm
 
 
-# Convert Rotor to a rotation matrix.
-def rotor_to_rotation_matrix(R):
-    axis = np.array(normalize(I*R(2)).list(1)[0][:3]) # compute axis from rotor
-    angle = np.arccos(R(0))*2 # Compute angle from rotor
-    rotation = Rotation.from_rotvec(angle * axis)
-
-    # Get the rotation matrix
-    Rot_matrix = rotation.as_matrix()
-
-    return Rot_matrix
-
-def load_obj(path):
-    """
-    read a dictionary from a pickle file
-    """
-    with open(path, 'rb') as f:
-        return pickle.load(f)
-
-def load_3DMatch_PCs(base_dir,item=0):
-    config_path = os.path.join(base_dir,"config/train_info.pkl")
-    config = load_obj(config_path)
-    return config
-
-def add_subdirectory(old_dir,subdir):
-    base = os.path.basename(old_dir)
-    directory = os.path.dirname(old_dir)
-    new_path = os.path.join(directory, subdir, base)
-    return new_path
-
-def read_poses(path):
-    file_ = open(path)
-    data = file_.read()
-    data_list = data.split("\n")
-    data_list_ = [0]*len(data_list)
-
-    for i in range(len(data_list)):
-        data_list_[i] = data_list[i].split("\t")[:-1]
-    
-    rbm_txt = data_list_[1:-1]
-
-    rbm = np.zeros([4,4])
-    for i in range(4):
-        for j in range(4):
-            rbm[i][j] = float(rbm_txt[i][j])
-    
-    return rbm
+isMacOS = (platform.system() == "Darwin")
 
 
-def change_ext_subdir(path,subdir,ext_):
-    pre, ext = os.path.splitext(path)
-    path = pre + ext_
-    return add_subdirectory(path,subdir)
+class Settings:
+    UNLIT = "defaultUnlit"
+    LIT = "defaultLit"
+    NORMALS = "normals"
+    DEPTH = "depth"
+
+    DEFAULT_PROFILE_NAME = "Bright day with sun at +Y [default]"
+    POINT_CLOUD_PROFILE_NAME = "Cloudy day (no direct sun)"
+    CUSTOM_PROFILE_NAME = "Custom"
+    LIGHTING_PROFILES = {
+        DEFAULT_PROFILE_NAME: {
+            "ibl_intensity": 45000,
+            "sun_intensity": 45000,
+            "sun_dir": [0.577, -0.577, -0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        "Bright day with sun at -Y": {
+            "ibl_intensity": 45000,
+            "sun_intensity": 45000,
+            "sun_dir": [0.577, 0.577, 0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        "Bright day with sun at +Z": {
+            "ibl_intensity": 45000,
+            "sun_intensity": 45000,
+            "sun_dir": [0.577, 0.577, -0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        "Less Bright day with sun at +Y": {
+            "ibl_intensity": 35000,
+            "sun_intensity": 50000,
+            "sun_dir": [0.577, -0.577, -0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        "Less Bright day with sun at -Y": {
+            "ibl_intensity": 35000,
+            "sun_intensity": 50000,
+            "sun_dir": [0.577, 0.577, 0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        "Less Bright day with sun at +Z": {
+            "ibl_intensity": 35000,
+            "sun_intensity": 50000,
+            "sun_dir": [0.577, 0.577, -0.577],
+            # "ibl_rotation":
+            "use_ibl": True,
+            "use_sun": True,
+        },
+        POINT_CLOUD_PROFILE_NAME: {
+            "ibl_intensity": 60000,
+            "sun_intensity": 50000,
+            "use_ibl": True,
+            "use_sun": False,
+            # "ibl_rotation":
+        },
+    }
+
+    DEFAULT_MATERIAL_NAME = "Polished ceramic [default]"
+    PREFAB = {
+        DEFAULT_MATERIAL_NAME: {
+            "metallic": 0.0,
+            "roughness": 0.7,
+            "reflectance": 0.5,
+            "clearcoat": 0.2,
+            "clearcoat_roughness": 0.2,
+            "anisotropy": 0.0
+        },
+        "Metal (rougher)": {
+            "metallic": 1.0,
+            "roughness": 0.5,
+            "reflectance": 0.9,
+            "clearcoat": 0.0,
+            "clearcoat_roughness": 0.0,
+            "anisotropy": 0.0
+        },
+        "Metal (smoother)": {
+            "metallic": 1.0,
+            "roughness": 0.3,
+            "reflectance": 0.9,
+            "clearcoat": 0.0,
+            "clearcoat_roughness": 0.0,
+            "anisotropy": 0.0
+        },
+        "Plastic": {
+            "metallic": 0.0,
+            "roughness": 0.5,
+            "reflectance": 0.5,
+            "clearcoat": 0.5,
+            "clearcoat_roughness": 0.2,
+            "anisotropy": 0.0
+        },
+        "Glazed ceramic": {
+            "metallic": 0.0,
+            "roughness": 0.5,
+            "reflectance": 0.9,
+            "clearcoat": 1.0,
+            "clearcoat_roughness": 0.1,
+            "anisotropy": 0.0
+        },
+        "Clay": {
+            "metallic": 0.0,
+            "roughness": 1.0,
+            "reflectance": 0.5,
+            "clearcoat": 0.1,
+            "clearcoat_roughness": 0.287,
+            "anisotropy": 0.0
+        },
+    }
+
+    def __init__(self):
+        self.mouse_model = gui.SceneWidget.Controls.ROTATE_CAMERA
+        # self.bg_color = gui.Color(0.5, 0.5, 0.5)
+        self.bg_color = gui.Color(1, 1, 1) # Default to white backgroud
+        self.show_skybox = False
+        self.show_axes = False
+        self.use_ibl = True
+        self.use_sun = True
+        self.new_ibl_name = None  # clear to None after loading
+        self.ibl_intensity = 45000
+        self.sun_intensity = 45000
+        self.sun_dir = [0.577, -0.577, -0.577]
+        self.sun_color = gui.Color(1, 1, 1)
+
+        self.apply_material = True  # clear to False after processing
+        self._materials = {
+            Settings.LIT: rendering.MaterialRecord(),
+            Settings.UNLIT: rendering.MaterialRecord(),
+            Settings.NORMALS: rendering.MaterialRecord(),
+            Settings.DEPTH: rendering.MaterialRecord()
+        }
+        self._materials[Settings.LIT].base_color = [0.9, 0.9, 0.9, 1.0]
+        self._materials[Settings.LIT].shader = Settings.LIT
+        self._materials[Settings.UNLIT].base_color = [0.9, 0.9, 0.9, 1.0]
+        self._materials[Settings.UNLIT].shader = Settings.UNLIT
+        self._materials[Settings.NORMALS].shader = Settings.NORMALS
+        self._materials[Settings.DEPTH].shader = Settings.DEPTH
+
+        # Conveniently, assigning from self._materials[...] assigns a reference,
+        # not a copy, so if we change the property of a material, then switch
+        # to another one, then come back, the old setting will still be there.
+        self.material = self._materials[Settings.LIT]
 
 
-def apply_rbm(pcd,rbm):
-    pts = np.asarray(pcd.points)
-    rot = rbm[:,:3][:3]
-    trans = rbm[:,-1][:3]
+        self.set_transparent_material([0.9, 0.9, 0.9])
 
-    pts = pts@rot + trans
-    pcd.points = o3d.utility.Vector3dVector(pts)
+    def set_transparent_material(self,color):
+        self.transp_mat = o3d.visualization.rendering.MaterialRecord()
 
+        self.transp_mat.shader = 'defaultLitTransparency'
+        # self.transp_mat.shader = 'defaultLitSSR'
+        self.transp_mat.base_color = color + [0.5]
 
-def get_point_clouds(cfg,base_dir,item=-1):
-    index = np.argsort(cfg['overlap'])[item] # The most overlapping scenes
-    src_path_ = os.path.join(base_dir,cfg['src'][index])
-    tgt_path_ = os.path.join(base_dir,cfg['tgt'][index])
-    print("Overlap:",cfg['overlap'][index])
-    # print(src_path)
-    # print(tgt_path)
-
-    src_path = change_ext_subdir(src_path_,"fragments",".ply")
-    tgt_path = change_ext_subdir(tgt_path_,"fragments",".ply")
-    print(src_path_)
-    print(cfg.keys())
-    
-
-    pose_src_path = change_ext_subdir(src_path_,"poses",".txt")
-    pose_tgt_path = change_ext_subdir(tgt_path_,"poses",".txt")
-    
-    src_rbm = read_poses(pose_src_path)
-    tgt_rbm = read_poses(pose_tgt_path)
+        self.transp_mat.base_roughness = 1
+        self.transp_mat.base_reflectance = 0.0
+        self.transp_mat.base_clearcoat = 0
+        self.transp_mat.thickness = 0
+        self.transp_mat.transmission = 0
+        self.transp_mat.absorption_distance = 0
+        self.transp_mat.absorption_color = [0,0,0]
 
 
-    src_pcd = o3d.io.read_point_cloud(src_path)
-    tgt_pcd = o3d.io.read_point_cloud(tgt_path)
+    def set_material(self, name):
+        self.material = self._materials[name]
+        self.apply_material = True
 
-    # rot = cfg['rot'][index]
-    # trans = cfg['trans'][index]
-    #print(rot)
+    def apply_material_prefab(self, name):
+        assert (self.material.shader == Settings.LIT)
+        prefab = Settings.PREFAB[name]
+        for key, val in prefab.items():
+            setattr(self.material, "base_" + key, val)
 
-    # apply_rbm(src_pcd,src_rbm)
-    # apply_rbm(tgt_pcd,tgt_rbm)
-
-    # R = rotmatrix_to_rotor(rot)
-    # t = nparray_to_3dvga_vector_array(trans.T[0])
-    # print(R)
-    # print(t)
-    
-    '''
-    pts = np.asarray(src_pcd.points)
-    pts = pts@rot + trans.T
-    src_pcd.points = o3d.utility.Vector3dVector(pts)
-    '''
-
-    # pts = np.asarray(tgt_pcd.points)
-    # pts = pts@rot + trans.T
-    # tgt_pcd.points = o3d.utility.Vector3dVector(pts)
+    def apply_lighting_profile(self, name):
+        profile = Settings.LIGHTING_PROFILES[name]
+        for key, val in profile.items():
+            setattr(self, key, val)
 
 
-    # pts = transform_numpy_cloud(src_pcd,R,t)
-    
-    # pts = transform_numpy_cloud(tgt_pcd,R,t)
-    # tgt_pcd.points = o3d.utility.Vector3dVector(pts)
-    return (src_pcd,tgt_pcd)
-    
-
-class PCViewer3D:
-    def __init__(self,pcds,draw_primitives=[True,True,True],sigma_iter=0.0005,sigma=0.01,rdn_rbm=False,eig_grades = [1,2],compare_primitives=False):
-        self.draw_primitives_bool = draw_primitives
-        self.eig_grades = eig_grades
-        self.sigma = sigma
-        self.mu = 0
-        self.pcd = pcds
-        self.noisy_pcd = [copy.deepcopy(pcds[0]),copy.deepcopy(pcds[1])]
-        self.P_lst = [0,0,0]
-        self.sigma_iter = sigma_iter
-        self.pcd += [0]
-        self.noisy_pcd += [0]
-
-        gui.Application.instance.initialize()
-        w = gui.Application.instance.create_window("Open3D Example - Events",
-                                               640, 480)
-        self.window = w
-        
-        self.scene = gui.SceneWidget()
-        self.scene.scene = o3d.visualization.rendering.Open3DScene(w.renderer)
-        
-        
-        # self.scene.scene.enable_indirect_light(False)
-        # self.scene.scene.enable_sun_light(False)
-
-        # vis = o3d.visualization.Visualizer()
-        # vis.get_render_option().line_width = 5
-        # o3d.visualization.RenderOption.line_width = 20.0
-
-        # self.scene.scene.get_render_option().line_width = 10
-        # em = w.theme.font_size
-        # w.add_child(self.scene)
-        
-        # layout = gui.Vert(0, gui.Margins(0.5 * em, 0.5 * em, 0.5 * em,
-        #                                  0.5 * em))
-
-        # collapse = gui.CollapsableVert("Widgets", 0.33 * em,
-                                    #    gui.Margins(em, 0, 0, 0))
-        # layout.add_child(collapse)
-        # w.add_child(layout)
-        # gui layout
-        # gui_layout = gui.Vert(0, gui.Margins(0.5 * em, 0.5 * em, 0.5 * em, 0.5 * em))
-        # # create frame that encapsulates the gui
-        # gui_layout.frame = gui.Rect(w.content_rect.x, w.content_rect.y, 500, w.content_rect.height)
-        # self.scene.frame = gui.Rect(500, w.content_rect.y, 900, w.content_rect.height)
-        # w.add_child(gui_layout)
-        w.add_child(self.scene)
-        
-        # self._widget_idx = 0
-        # hz = gui.Horiz(spacing=5)
-        # push_widget_btn = gui.Button('Push widget')
-        # push_widget_btn.vertical_padding_em = 0
-        # pop_widget_btn = gui.Button('Pop widget')
-        # pop_widget_btn.vertical_padding_em = 0
-        # stack = gui.WidgetStack()
-        # stack.set_on_top(lambda w: print(f'New widget is: {w.text}'))
-        # hz.add_child(gui.Label('WidgetStack '))
-        # hz.add_child(push_widget_btn)
-        # hz.add_child(pop_widget_btn)
-        # hz.add_child(stack)
-        # w.add_child(hz)
-
-        # def push_widget():
-        #     self._widget_idx += 1
-        #     stack.push_widget(gui.Label(f'Widget {self._widget_idx}'))
-
-        # push_widget_btn.set_on_clicked(push_widget)
-        # pop_widget_btn.set_on_clicked(stack.pop_widget)
-
-        self.material = [0,0,0]
-        # self.material = o3d.visualization.rendering.MaterialRecord()
-        # self.material.shader = "defaultLit"
-
-        # Color for each point cloud
-        self.pc_color = [[213/255, 65/255, 0],[0, 0, 1],[34/255, 150/255, 0 ]]
-
-        print(self.pc_color)
-
-        self.material[0] = self.get_transparent_material(self.pc_color[0])
-        self.material[1] = self.get_transparent_material(self.pc_color[1])
-        self.material[2] = self.get_transparent_material(self.pc_color[2])
-
-        self.scene.scene.add_geometry("Point Cloud0", self.noisy_pcd[0], self.material[0])
-        # self.scene.scene.add_geometry("Point Cloud1", self.noisy_pcd[1], self.material)
-
-        self.scene.setup_camera(60, self.scene.scene.bounding_box, (0, 0, 0))
-        self.scene.set_on_key(self.on_key)
-         
-
-        self.primitive_material = [0,0,0]
-
-        self.primitive_material[0] = self.get_transparent_material(self.pc_color[0])
-        self.primitive_material[1] = self.get_transparent_material(self.pc_color[1])
-        self.primitive_material[2] = self.get_transparent_material(self.pc_color[2])
-        
-        # self.transp_mat = self.get_transparent_material([0.0,0.5,0.5])
-        # self.transp_mat_neg = self.get_transparent_material([0.5,0.5,0.0])
-        # self.cylinder_mat = self.get_transparent_material([1.0,0.0,0.0])
-        # self.cylinder_mat_neg = self.get_transparent_material([0.0,1.0,0.0])
-
-        self.scene.scene.set_background([1.0,1.0,1.0,1.0])
-        # self.scene.scene.show_axes(True)
-        self.rdn_rbm = rdn_rbm
-        
-        self.n_points = np.asarray(self.pcd[0].points).shape[0]
-        self.algorithm = None
-
-        self.theta = 0
-        self.t = 0
-        self.camera_pos = [0,0,0]
-
-        if self.rdn_rbm:
-            self.T,self.R = gen_pseudordn_rigtr(100,1)
-            self.t = -eo|self.T*2
-        else:
-            self.theta = 90*np.pi/180
-            self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
-            self.t = 0.0*e1 + 0.3*e2 + 0.3*e3
-            self.T = 1 + (1/2)*einf*self.t
-
-        # Initialize the estimated point cloud in green
-        self.pcd[2] = copy.deepcopy(self.pcd[0])
-        
-        self.set_pc_color(0)
-        self.set_pc_color(2)
-
+class PointCloudSettings:
+    '''Class for a single point cloud'''
+    def __init__(self,pcd,id):
+        self.translation_axis = np.array([1,2,4])
+        self.translation_magnitude = 0
+        self.rotation_angle = 0
+        self.rotation_axis = np.array([1,0,0])
+        self.pcd = copy.deepcopy(pcd)
+        self.noisy_pcd = copy.deepcopy(pcd)
+        self.rotation_matrix = np.eye(3)
+        self.translation_vector = np.zeros(3)
+        self.color = [0,0,0,1]
+        self.id = id
+        self.Rotor = vga3d.multivector([1],basis=['e'])
+        self.Motor = vga3d.multivector([1],basis=['e'])
+        self._draw_geometries = [False,False,True]
         self.arrow_scale = 1
+        self.geometries = []
+        self.ground_eigmvs = []
+        self.eigmvs = []
+        self.eigbivs = []
+        self.eigvecs = []
+        self.show = True
 
-        self.noisy_pcd[0] = copy.deepcopy(self.pcd[0])
-        self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
-        # color = np.array([[0.0,0.5,0.0]]*pts.shape[0])
-        # self.pcd[2].colors = o3d.utility.Vector3dVector(color)
-
-        # self.update_pc(0)
-        # self.update_pc(1)
+    def compute_transformation(self): 
+        ''' Determines the rotation matrix and translation matrix'''
+        translation_vector = self.translation_magnitude*self.translation_axis
         
-        self.compare_primitives = compare_primitives
-        if not self.compare_primitives:
-            self.update_rbm()
-        else:
-            self.draw_noisy_PCs()
-        
-    def set_pc_color(self,j):
-        pts = np.asarray(self.pcd[j].points)
-        n_points = pts.shape[0]
-        color = np.array([self.pc_color[j]]*n_points)
-        self.pcd[j].colors = o3d.utility.Vector3dVector(color)
+        # Compute the rotor: Rotor = cos(angle) + I*axis*sin(angle)
+        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
+        rotation_matrix = rotor3d_to_matrix(Rotor)
+        return translation_vector,rotation_matrix,Rotor
 
-    def draw_noisy_PCs(self):
-        self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
-        self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
-        
-        self.update_pc(0)
-        self.update_pc(1)
+    def compute_motor(self):
+        ''' Computes a motor from the axis angle and translation vector''' 
+        t_vec = self.translation_magnitude*self.translation_axis
+        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
+        t = vga3d.multivector(t_vec.tolist(),grades=1)
+        Translator = 1 + (1/2)*einf*t
+        return Translator*Rotor
 
-        self.compute_primitives(0)
-        self.compute_primitives(1)
+    def get_pcd_as_mvcloud(self):
+        ''' Gets the noisy point cloud data as a multivector point cloud'''
+        pts = self.get_pcd_as_nparray()
+        return nparray_to_3dvga_vector_array(pts)
 
-        self.draw_primitives(0)
-        self.draw_primitives(1)
+    def get_pcd_as_nparray(self):
+        return np.asarray(self.noisy_pcd.points)
+    
+    def get_points_nbr(self):
+        pts = self.get_pcd_as_nparray()
+        return pts.shape[0]
 
-    # Get relative translation error scale
-    def get_scale_rte(self):
-        self.rte_scale = np.max(abs(np.asarray(self.pcd[0].points)))
+    def update_noisy_pcd(self,scene,material):
+        '''Update the point cloud from a given scene'''
+        scene.remove_geometry("noisy_pcd_" + str(self.id))
+        if self.show:
+            material.base_color = self.color
+            # self.compute_pcd_normals(i) # Do not update normals 
+            scene.add_geometry("noisy_pcd_" + str(self.id), self.noisy_pcd,
+                                                            material)
+    def compute_pcd_normals(self):
+        self.noisy_pcd.estimate_normals()
+        self.noisy_pcd.normalize_normals()
 
-
-    # Adds noise to pcd then stores the result in noisy_pcd
-    def add_noise(self,pcd,noisy_pcd):
-        
-        pts = np.copy(np.asarray(pcd.points))
-        noise = np.random.normal(self.mu,self.sigma,size=pts.shape)
+    def update_gaussian_noise(self,sigma):
+        pts = np.copy(np.asarray(self.pcd.points))
+        noise = np.random.normal(0,sigma,size=pts.shape)
         pts += noise
-        noisy_pcd.points = o3d.utility.Vector3dVector(pts)
+        self.noisy_pcd.points = o3d.utility.Vector3dVector(pts)
 
-    def update_rbm(self):
-        if self.rdn_rbm:
-            self.T,self.R = gen_pseudordn_rigtr(100,1)
-            self.t = -eo|self.T*2
-        else:
-            self.R = np.cos(self.theta/2) + e2*I*np.sin(self.theta/2)
-            self.T = 1 + (1/2)*einf*self.t
-        # Applies a transformation to pcd[1] and stores it in noisy_pcd[1]
-        pts = transform_numpy_cloud(self.pcd[1],self.R,self.t)
-        self.pcd[1].points = o3d.utility.Vector3dVector(pts)
-        self.update_model()
+    def update_axis_angle(self,trans_axis,trans_mag,rot_angle,rot_axis):
+        self.rotation_angle = rot_angle
+        self.rotation_axis = rot_axis
+        self.translation_axis = trans_axis
+        self.translation_magnitude = trans_mag
 
-    def update_model(self):
+    
 
-        # Add noise to the point clouds
-        self.add_noise(self.pcd[0],self.noisy_pcd[0]) # Add noise to BLUE PC
-        self.add_noise(self.pcd[1],self.noisy_pcd[1]) # Add noise to RED PC
+
+    def update_point_cloud_2(self,scene,material,transp_mat):
+        '''Computes the rigid transformation and applies it to the points and the primitives
+           Computes a motor and rotation matrix '''
+
+        # t,R,Rotor = self.compute_transformation()
+        Motor_new = self.compute_motor()
+        t_new,R_new = motor_to_rotation_translation(Motor_new)
+
+        # t_old = vga3d.multivector(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
+        # Motor_old = (1+(1/2)*einf*t_old)*self.Rotor
+
+        Motor_old = self.Motor
+        # t_new = vga3d.multivector(t.tolist(),grades=1) # Convert to geometric algebra
+        # Motor_new = (1+(1/2)*einf*t_new)*Rotor
         
-        self.estimate_rigtr()
-
-        self.update_pc(0)
-        # self.update_pc(1)
-        self.update_pc(2)
-
-        self.compute_primitives(2)
-
-        self.draw_primitives(0)
-        self.draw_primitives(2)
-        
-        # self.draw_CeOM(0)
-        # self.draw_CeOM(2)
+        Motor = Motor_new*~Motor_old
+        t,R = motor_to_rotation_translation(Motor)
 
         
-        # self.draw_primitives(1)
+        # Rotate and translate the point cloud data
+        data = [self.pcd,self.noisy_pcd]
+        for i in range(len(data)):
+            data[i].rotate(R@self.rotation_matrix.T, center=np.array([0, 0, 0]))
+            data[i].translate(-self.translation_vector)
+            data[i].rotate(R@self.rotation_matrix.T, center=np.array([0, 0, 0]))
+            data[i].translate(t)
+        
+        # # Apply the rigid transformation to the eigenmultivectors using the motor
+        # for i in range(len(self.eigmvs)):
+        #     self.eigmvs[i] = Motor*self.eigmvs[i]*~Motor
 
-    def get_transparent_material(self,color):
-        transp_mat = o3d.visualization.rendering.MaterialRecord()
+        # Apply the rigid transformation to the eigenbivectors using the motor
+        for i in range(len(self.eigbivs)):
+            self.eigbivs[i] = Motor*self.eigbivs[i]*~Motor
 
-        transp_mat.shader = 'defaultLitTransparency'
-        # transp_mat.shader = 'defaultLitSSR'
-        transp_mat.base_color = color + [0.5]
+        # Apply the rigid transformation to the eigenvectors using the motor
+        for i in range(len(self.eigvecs)):
+            self.eigvecs[i] = Motor*self.eigvecs[i]*~Motor
 
-        transp_mat.base_roughness = 1
-        transp_mat.base_reflectance = 0.0
-        transp_mat.base_clearcoat = 0
-        transp_mat.thickness = 0
-        transp_mat.transmission = 0
-        transp_mat.absorption_distance = 0
-        transp_mat.absorption_color = [0,0,0]
+        self.translation_vector = t_new
+        self.rotation_matrix = R_new
+        self.Motor = Motor_new
+        _,self.Rotor = decompose_motor(Motor)
 
-        # transp_mat.shader = 'defaultLitTransparency'
-        # transp_mat.shader = "defaultLit"
-        # transp_mat.base_color = color + [1]
-        # print(transp_mat.base_color)
+        self.redraw_geometries(scene,material,transp_mat)
 
-        # transp_mat.base_roughness = 1.0
-        # transp_mat.base_reflectance = 0.0
-        # transp_mat.base_clearcoat = 1.0
-        # transp_mat.thickness = 5.0
-        # transp_mat.transmission = 3
-        # transp_mat.absorption_distance = 0
-        # transp_mat.absorption_color = color
-        return transp_mat
+    def update_point_cloud(self):
+        '''Computes the rigid transformation (Motor) and applies it to the points and the primitives
+           Computes a Motor. Applies the new transformation composed with the adjoint of the old.'''
 
-    def get_solid_material(self,color):
-        solid_mat = o3d.visualization.rendering.MaterialRecord()
-        # solid_mat.shader = 'defaultLitTransparency'
-        # solid_mat.shader = "defaultLit"
-        solid_mat.base_color = color + [1]
-
-        # solid_mat.base_roughness = 100
-        # solid_mat.base_reflectance = 0
-        # solid_mat.base_clearcoat = 1.0
-        # solid_mat.thickness = 1.0
-        # solid_mat.transmission = 0
-        # solid_mat.absorption_distance = 0
-        # solid_mat.absorption_color = color
-        return solid_mat
-
-    def get_line_material(self,color):
-        solid_mat = o3d.visualization.rendering.MaterialRecord()
-        solid_mat.shader = "defaultLit"
-        solid_mat.base_color = color + [10]
-        solid_mat.base_roughness = 1
-        solid_mat.base_reflectance = 0
-        solid_mat.base_clearcoat = 0
-        solid_mat.thickness = 10.0
-        solid_mat.transmission = 0
-        solid_mat.absorption_distance = 0
-        solid_mat.absorption_color = color
-        return solid_mat
+        Motor = self.compute_motor()
+        self.apply_motor(Motor*~self.Motor)
 
 
-    def update_pc(self,j):
-        # print("Updating Point Cloud "+str(j))
-        self.scene.scene.remove_geometry("Point Cloud"+str(j))
-        self.scene.scene.add_geometry("Point Cloud"+str(j), self.noisy_pcd[j], self.get_solid_material(self.pc_color[j]))
-        # print(self.pc_color[j])
+    def redraw_geometries(self,scene,material,transp_mat):
+        ''' Redraws the point cloud and its geometries'''
+        self.compute_geometry_from_eigmvs() # Recompute geometries
+        self.draw_geometries(scene,material,transp_mat)
+        self.update_noisy_pcd(scene,material)
+    
+    def apply_motor(self,Motor):
+        ''' Applies a rigid transformation to the point clouds and the eigenmultivectors '''
+        t_vec,R_matrix = motor_to_rotation_translation(Motor) # Get rotation matrix and translation
 
-    def run(self):
-        gui.Application.instance.run()
+        # Apply the rigid transformation to the eigenbivectors using the motor
+        for i in range(len(self.eigbivs)):
+            self.eigbivs[i] = Motor*self.eigbivs[i]*~Motor
 
-    def on_key(self,e):
-        if e.key == gui.KeyName.K:
-            if e.type == gui.KeyEvent.UP:  
-                self.sigma += self.sigma_iter
-                if self.compare_primitives:
-                    self.draw_noisy_PCs()
-                else:
-                    self.update_model()
-        if e.key == gui.KeyName.J:
-            if e.type == gui.KeyEvent.UP:  
-                self.sigma -= self.sigma_iter
-                if self.sigma < 0:
-                    self.sigma = 0
-                if self.compare_primitives:
-                    self.draw_noisy_PCs()
-                else:
-                    self.update_model()
-        if e.key == gui.KeyName.M:
-            if e.type == gui.KeyEvent.UP:
-                self.sigma = 0
-                if self.compare_primitives:
-                    self.draw_noisy_PCs()
-                else:
-                    self.update_model()
+        # Apply the rigid transformation to the eigenvectors using the motor
+        for i in range(len(self.eigvecs)):
+            self.eigvecs[i] = Motor*self.eigvecs[i]*~Motor
 
-        if e.key == gui.KeyName.Q:
-            gui.Application.instance.quit()
-        if e.key == gui.KeyName.SPACE:
-            if self.compare_primitives:
-                self.draw_noisy_PCs()
-            else:
-                self.update_model()
-        if e.key == gui.KeyName.V:
-            self.scene.setup_camera(60, self.scene.scene.bounding_box, (0, 0, 0))
+        data = [self.pcd,self.noisy_pcd]
+        for i in range(len(data)):
+            data[i].rotate(R_matrix,center=np.array([0,0,0])) # Do not forget the center!!!
+            data[i].translate(t_vec)
+
+        # Important to always 'normalise' the motor, otherwise the values tend to explode
+        self.Motor = project_motor(Motor*self.Motor) # Project to the motor manifold
+
+    
+
+    def compute_eigmvs(self):
+        '''Computes the eigenmultivectors associated to the noisy point cloud'''
+        x_pts = np.asarray(self.noisy_pcd.points)
+    
+        # Convert numpy array to multivector array
+        x = nparray_to_3dvga_vector_array(x_pts)
+
+        # Extend the points via the conformal mapping
+        p = conformal_mapping(x)
+
+        # Compute the eigenmultivectors associated with the points p
+        self.eigmvs,self.eigvalues = get_3dcga_eigmvs(p)
+
+        # disambiguate the sign of the eigenmultivectors 
+        self.mvref = compute_reference(p)
+        for i in range(len(self.eigmvs)):
+            self.eigmvs[i] *= np.sign((self.eigmvs[i]*self.mvref)(0))
+
+        # Separate the eigenmultivectors into bivector and vector
+        self.eigbivs,self.eigvecs = separate_grades(self.eigmvs)
             
 
-        if e.key == gui.KeyName.W:
-            if e.type == gui.KeyEvent.UP: 
-                self.t += 0.01*e1
-                if not self.compare_primitives:
-                    self.update_rbm()
-                    self.update_model()
-        if e.key == gui.KeyName.S:
-            if e.type == gui.KeyEvent.UP: 
-                self.t -= 0.01*e1
-                if not self.compare_primitives:
-                    self.update_rbm()
-                    self.update_model()
-
-        if e.key == gui.KeyName.A:
-            if e.type == gui.KeyEvent.UP:
-                self.theta += 1/np.pi
-                if not self.compare_primitives:
-                    self.update_rbm()
-                    self.update_model()
-        if e.key == gui.KeyName.D:
-            if e.type == gui.KeyEvent.UP:
-                self.theta -= 1/np.pi
-                if not self.compare_primitives:
-                    self.update_rbm()
-                    self.update_model()
+    def compute_geometry_from_eigmvs(self):
+        self.geometries = [0]*3 # [sphere,circle,arrow]
+        # The boolean that decides which material are transparent
+        self._transp_mat = [0]*3 # [sphere,circle,arrow]
         
-        if e.key == gui.KeyName.Z:
-            if e.type == gui.KeyEvent.UP:
-                self.draw_primitives_bool[0] = not self.draw_primitives_bool[0]
-                self.draw_primitives(0)
-                # self.draw_primitives(1)
-                self.draw_primitives(2)
+        # A different list for each
+        for i in range(len(self.geometries)):
+            self.geometries[i] = []
+            self._transp_mat[i] = []
 
-        if e.key == gui.KeyName.X:
-            if e.type == gui.KeyEvent.UP:
-                self.draw_primitives_bool[1] = not self.draw_primitives_bool[1]
-                self.draw_primitives(0)
-                # self.draw_primitives(1)
-                self.draw_primitives(2)
-        if e.key == gui.KeyName.C:
-            if e.type == gui.KeyEvent.UP:
-                self.draw_primitives_bool[2] = not self.draw_primitives_bool[2]
-                self.draw_primitives(0)
-                # self.draw_primitives(1)
-                self.draw_primitives(2)
+        # Build the geometries for the spheres
+        for i in range(len(self.eigvecs)):
+            d,l,radius_sq = get_properties(self.eigvecs[i])
+            d_array = np.array(d)
+            sphere = self.get_sphere(radius_sq,l)
+            self.geometries[0] += [sphere]
 
-        if e.key == gui.KeyName.R:
-            self.arrow_scale *= 1.1
-            self.draw_primitives(0)
-            # self.draw_primitives(1)
-            self.draw_primitives(2)
+        # Build the geometries for the arrows and for the circles
+        for i in range(len(self.eigbivs)):
+            d,l,radius_sq = get_properties(self.eigbivs[i])
+            A,B,C,D = get_coeffs(self.eigbivs[i]) # compute the arrows from the circles
+            arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
+            circle_geometries = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
+            
+            self.geometries[1] += circle_geometries
+            self.geometries[2] += [arrow]
+            self._transp_mat[1] += [True,True,False] # Solid 2D torus, transparent circles
 
-        if e.key == gui.KeyName.T:
-            self.arrow_scale /= 1.1
-            self.draw_primitives(0)
-            # self.draw_primitives(1)
-            self.draw_primitives(2)
+        self._transp_mat[0] = [True]*len(self.geometries[0]) # Transparent spheres
+        self._transp_mat[2] = [False]*len(self.geometries[2]) # Solid arrows
 
+    def draw_geometries(self,scene,material,transp_mat):
+        material.base_color = self.color
+        # print(self.color[:2])
+        # print(type(self.color))
 
-
-        return gui.Widget.EventCallbackResult.IGNORED
+        transp_mat.base_color = np.r_[self.color[:3],0.5]
+        # transp_mat.base_color[3] = 0.5 # Set alpha to 0.5
+        self.remove_geometries(scene)
+        if self.show:
+            for i in range(len(self.geometries)):
+                if self._draw_geometries[i]:
+                    for j in range(len(self.geometries[i])):
+                        _material = transp_mat if self._transp_mat[i][j] else material # check if material is transparent
+                        scene.add_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j),self.geometries[i][j],_material)
+        
+    def remove_geometries(self,scene):
+        for i in range(len(self.geometries)):
+            for j in range(len(self.geometries[i])):
+                scene.remove_geometry("primitive_"+str(self.id)+'_'+str(i)+'_'+str(j))
     
+    def update_axis_angle_from_motor(self):
+        t,a,theta = motor_to_axis_angle(self.Motor)
+        t_normalized = pyga.normalize_mv(t)
+
+        self.translation_vector = np.array(t.tolist(1)[0][:3])
+        self.translation_axis = np.array(t_normalized.tolist(1)[0][:3])
+        self.translation_magnitude = (t_normalized|t)(0)
+        self.rotation_axis = np.array(a.tolist(1)[0][:3])
+        self.rotation_angle = theta*2
+        print("trans vector",t)
+        print("rot axis",a)
+        print("rot angle",theta)
+
+    def update_geometries(self,scene,material,transp_mat):
+        self.compute_eigmvs()
+        self.compute_geometry_from_eigmvs()
+        self.draw_geometries(scene,material,transp_mat)
+
     def get_sphere(self,radius_sq,location):
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=np.sqrt(abs(radius_sq)),resolution=20)
         sphere.compute_vertex_normals()
@@ -623,194 +578,841 @@ class PCViewer3D:
     
         return circle_mesh,torus_mesh,torus_mesh1
 
+class AppWindow:
+    MENU_OPEN = 1
+    MENU_EXPORT = 2
+    MENU_QUIT = 3
+    MENU_SHOW_SETTINGS = 11
+    MENU_ABOUT = 21
 
-    # Draw Center Of Mass (CeOM) of point cloud i
-    def draw_CeOM(self,i):
-        self.scene.scene.remove_geometry('CeOM'+str(i))
+    DEFAULT_IBL = "default"
 
-        x_pts = np.asarray(self.noisy_pcd[i].points)
-        x_bar = x_pts.sum(axis=0)/self.n_points
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.005,resolution=20)
-        sphere.compute_vertex_normals()
-        sphere.paint_uniform_color([0.7, 0.1, 0.1])  # To be changed to the point color.
-        sphere = sphere.translate(x_bar)
-        self.scene.scene.add_geometry('CeOM'+str(i),sphere,self.get_transparent_material(self.pc_color[i]))
+    MATERIAL_NAMES = ["Lit", "Unlit", "Normals", "Depth"]
+    MATERIAL_SHADERS = [
+        Settings.LIT, Settings.UNLIT, Settings.NORMALS, Settings.DEPTH
+    ]
 
+    def __init__(self, width, height):
+        self.settings = Settings()
+        self.benchmark_init()
+        resource_path = gui.Application.instance.resource_path
+        self.settings.new_ibl_name = resource_path + "/" + AppWindow.DEFAULT_IBL
 
-    def estimate_rigtr(self):
+        self.window = gui.Application.instance.create_window(
+            "Open3D", width, height)
+        w = self.window  # to make the code more concise
+
+        # 3D widget
+        self._scene = gui.SceneWidget()
+        self._scene.scene = rendering.Open3DScene(w.renderer)
+        self._scene.set_on_sun_direction_changed(self._on_sun_dir)
+
+        # ---- Settings panel ----
+        # Rather than specifying sizes in pixels, which may vary in size based
+        # on the monitor, especially on macOS which has 220 dpi monitors, use
+        # the em-size. This way sizings will be proportional to the font size,
+        # which will create a more visually consistent size across platforms.
+        em = w.theme.font_size
+        separation_height = int(round(0.5 * em))
+
+        # Widgets are laid out in layouts: gui.Horiz, gui.Vert,
+        # gui.CollapsableVert, and gui.VGrid. By nesting the layouts we can
+        # achieve complex designs. Usually we use a vertical layout as the
+        # topmost widget, since widgets tend to be organized from top to bottom.
+        # Within that, we usually have a series of horizontal layouts for each
+        # row. All layouts take a spacing parameter, which is the spacing
+        # between items in the widget, and a margins parameter, which specifies
+        # the spacing of the left, top, right, bottom margins. (This acts like
+        # the 'padding' property in CSS.)
+        self._settings_panel = gui.Vert(
+            0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em))
+
+        self._settings_panel.background_color = gui.Color(0.5, 0.5, 0.5, 0.5) # Set the widget to transparent
+
+        # Create a collapsible vertical widget, which takes up enough vertical
+        # space for all its children when open, but only enough for text when
+        # closed. This is useful for property pages, so the user can hide sets
+        # of properties they rarely use.
+        view_ctrls = gui.CollapsableVert("View controls", 0.25 * em,
+                                         gui.Margins(em, 0, 0, 0))
+        view_ctrls.set_is_open(False)
+
+        self._arcball_button = gui.Button("Arcball")
+        self._arcball_button.horizontal_padding_em = 0.5
+        self._arcball_button.vertical_padding_em = 0
+        self._arcball_button.set_on_clicked(self._set_mouse_mode_rotate)
+        self._fly_button = gui.Button("Fly")
+        self._fly_button.horizontal_padding_em = 0.5
+        self._fly_button.vertical_padding_em = 0
+        self._fly_button.set_on_clicked(self._set_mouse_mode_fly)
+        self._model_button = gui.Button("Model")
+        self._model_button.horizontal_padding_em = 0.5
+        self._model_button.vertical_padding_em = 0
+        self._model_button.set_on_clicked(self._set_mouse_mode_model)
+        self._sun_button = gui.Button("Sun")
+        self._sun_button.horizontal_padding_em = 0.5
+        self._sun_button.vertical_padding_em = 0
+        self._sun_button.set_on_clicked(self._set_mouse_mode_sun)
+        self._ibl_button = gui.Button("Environment")
+        self._ibl_button.horizontal_padding_em = 0.5
+        self._ibl_button.vertical_padding_em = 0
+        self._ibl_button.set_on_clicked(self._set_mouse_mode_ibl)
+        view_ctrls.add_child(gui.Label("Mouse controls"))
+        # We want two rows of buttons, so make two horizontal layouts. We also
+        # want the buttons centered, which we can do be putting a stretch item
+        # as the first and last item. Stretch items take up as much space as
+        # possible, and since there are two, they will each take half the extra
+        # space, thus centering the buttons.
+        h = gui.Horiz(0.25 * em)  # row 1
+        h.add_stretch()
+        h.add_child(self._arcball_button)
+        h.add_child(self._fly_button)
+        h.add_child(self._model_button)
+        h.add_stretch()
+        view_ctrls.add_child(h)
+        h = gui.Horiz(0.25 * em)  # row 2
+        h.add_stretch()
+        h.add_child(self._sun_button)
+        h.add_child(self._ibl_button)
+        h.add_stretch()
+        view_ctrls.add_child(h)
+
+        self._show_skybox = gui.Checkbox("Show skymap")
+        self._show_skybox.set_on_checked(self._on_show_skybox)
+        view_ctrls.add_fixed(separation_height)
+        view_ctrls.add_child(self._show_skybox)
+
+        self._bg_color = gui.ColorEdit()
+        self._bg_color.set_on_value_changed(self._on_bg_color)
+
+        grid = gui.VGrid(2, 0.25 * em)
+        grid.add_child(gui.Label("BG Color"))
+        grid.add_child(self._bg_color)
+        view_ctrls.add_child(grid)
+
+        self._show_axes = gui.Checkbox("Show axes")
+        self._show_axes.set_on_checked(self._on_show_axes)
+        view_ctrls.add_fixed(separation_height)
+        view_ctrls.add_child(self._show_axes)
+
+        self._profiles = gui.Combobox()
+        for name in sorted(Settings.LIGHTING_PROFILES.keys()):
+            self._profiles.add_item(name)
+        self._profiles.add_item(Settings.CUSTOM_PROFILE_NAME)
+        self._profiles.set_on_selection_changed(self._on_lighting_profile)
+        view_ctrls.add_fixed(separation_height)
+        view_ctrls.add_child(gui.Label("Lighting profiles"))
+        view_ctrls.add_child(self._profiles)
+        self._settings_panel.add_fixed(separation_height)
+        self._settings_panel.add_child(view_ctrls)
+
+        advanced = gui.CollapsableVert("Advanced lighting", 0,
+                                       gui.Margins(em, 0, 0, 0))
+        advanced.set_is_open(False)
+
+        self._use_ibl = gui.Checkbox("HDR map")
+        self._use_ibl.set_on_checked(self._on_use_ibl)
+        self._use_sun = gui.Checkbox("Sun")
+        self._use_sun.set_on_checked(self._on_use_sun)
+        advanced.add_child(gui.Label("Light sources"))
+        h = gui.Horiz(em)
+        h.add_child(self._use_ibl)
+        h.add_child(self._use_sun)
+        advanced.add_child(h)
+
+        self._ibl_map = gui.Combobox()
+        for ibl in glob.glob(gui.Application.instance.resource_path +
+                             "/*_ibl.ktx"):
+            self._ibl_map.add_item(os.path.basename(ibl[:-8]))
+        self._ibl_map.selected_text = AppWindow.DEFAULT_IBL
+        self._ibl_map.set_on_selection_changed(self._on_new_ibl)
+        self._ibl_intensity = gui.Slider(gui.Slider.INT)
+        self._ibl_intensity.set_limits(0, 200000)
+        self._ibl_intensity.set_on_value_changed(self._on_ibl_intensity)
+        grid = gui.VGrid(2, 0.25 * em)
+        grid.add_child(gui.Label("HDR map"))
+        grid.add_child(self._ibl_map)
+        grid.add_child(gui.Label("Intensity"))
+        grid.add_child(self._ibl_intensity)
+        advanced.add_fixed(separation_height)
+        advanced.add_child(gui.Label("Environment"))
+        advanced.add_child(grid)
+
+        self._sun_intensity = gui.Slider(gui.Slider.INT)
+        self._sun_intensity.set_limits(0, 200000)
+        self._sun_intensity.set_on_value_changed(self._on_sun_intensity)
+        self._sun_dir = gui.VectorEdit()
+        self._sun_dir.set_on_value_changed(self._on_sun_dir)
+        self._sun_color = gui.ColorEdit()
+        self._sun_color.set_on_value_changed(self._on_sun_color)
+        grid = gui.VGrid(2, 0.25 * em)
+        grid.add_child(gui.Label("Intensity"))
+        grid.add_child(self._sun_intensity)
+        grid.add_child(gui.Label("Direction"))
+        grid.add_child(self._sun_dir)
+        grid.add_child(gui.Label("Color"))
+        grid.add_child(self._sun_color)
+        advanced.add_fixed(separation_height)
+        advanced.add_child(gui.Label("Sun (Directional light)"))
+        advanced.add_child(grid)
+
+        self._settings_panel.add_fixed(separation_height)
+        self._settings_panel.add_child(advanced)
+
+        material_settings = gui.CollapsableVert("Material settings", 0,
+                                                gui.Margins(em, 0, 0, 0))
+        material_settings.set_is_open(False)
+
+        self._shader = gui.Combobox()
+        self._shader.add_item(AppWindow.MATERIAL_NAMES[0])
+        self._shader.add_item(AppWindow.MATERIAL_NAMES[1])
+        self._shader.add_item(AppWindow.MATERIAL_NAMES[2])
+        self._shader.add_item(AppWindow.MATERIAL_NAMES[3])
+        self._shader.set_on_selection_changed(self._on_shader)
+        self._material_prefab = gui.Combobox()
+        for prefab_name in sorted(Settings.PREFAB.keys()):
+            self._material_prefab.add_item(prefab_name)
+        self._material_prefab.selected_text = Settings.DEFAULT_MATERIAL_NAME
+        self._material_prefab.set_on_selection_changed(self._on_material_prefab)
+        # self._material_color = gui.ColorEdit()
+        # self._material_color.set_on_value_changed(self._on_material_color)
+        self._point_size = gui.Slider(gui.Slider.INT)
+        self._point_size.set_limits(1, 10)
+        self._point_size.set_on_value_changed(self._on_point_size)
+
+        grid = gui.VGrid(2, 0.25 * em)
+        grid.add_child(gui.Label("Type"))
+        grid.add_child(self._shader)
+        grid.add_child(gui.Label("Material"))
+        grid.add_child(self._material_prefab)
+        grid.add_child(gui.Label("Point size"))
+        grid.add_child(self._point_size)
+        material_settings.add_child(grid)
+
+        rts_settings = gui.CollapsableVert("Rigid Transformation", 0,
+                                                gui.Margins(em, 0, 0, 0))
+
+        self._rot_axis = gui.VectorEdit()
+        self._rot_axis.background_color = gui.Color(0.5, 0.5, 0.5, 0.5)
+        self._rot_axis.set_on_value_changed(self._on_rot_axis)
+
+        self._rot_angle = gui.Slider(gui.Slider.INT)
+        self._rot_angle.set_limits(0,360)
+        self._rot_angle.set_on_value_changed(self._on_rot_angle)
+
+        self._trans_axis = gui.VectorEdit()
+        self._trans_axis.background_color = gui.Color(0.5, 0.5, 0.5, 0.5)
+        self._trans_axis.set_on_value_changed(self._on_trans_axis)
+
+        self._trans_mag = gui.Slider(gui.Slider.DOUBLE)
+        self._trans_mag.set_limits(0.0,1.0)
+        self._trans_mag.background_color = gui.Color(0.5, 0.5, 0.5, 0.5)
+        self._trans_mag.set_on_value_changed(self._on_trans_mag)
+
+        self._gaussian_noise = gui.Slider(gui.Slider.DOUBLE)
+        self._gaussian_noise.set_limits(0.0,0.05)
+        self._gaussian_noise.background_color = gui.Color(0.5, 0.5, 0.5, 0.5)
+        self._gaussian_noise.set_on_value_changed(self._on_gaussian_noise)
+        self._gaussian_noise.double_value = self.sigma
         
-        if(self.algorithm is None):
-            self.algorithm = self.get_default_algorithm()
+        self._point_cloud = gui.Combobox()
+        self._point_cloud.set_on_selection_changed(self._on_point_cloud)
+
+        self._point_cloud_color = gui.ColorEdit()
+        self._point_cloud_color.set_on_value_changed(self._on_point_cloud_color)
+
+        self._increase_arrows = gui.Button("Increase")
+        self._decrease_arrows = gui.Button("Decrease")
+        self._increase_arrows.set_on_clicked(self._on_increase_arrows)
+        self._decrease_arrows.set_on_clicked(self._on_decrease_arrows)
+
+        self._update_primitives = gui.Button("Update Primitives")
+        self._update_primitives.set_on_clicked(self._on_update_primitives)
         
-        x_pts = np.asarray(self.noisy_pcd[0].points)
-        y_pts = np.asarray(self.noisy_pcd[1].points)
+        self._show_point_cloud = gui.Checkbox("Point Cloud")
+        self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
 
-        # Convert numpy array to multivector array
-        x = nparray_to_3dvga_vector_array(x_pts)
-        y = nparray_to_3dvga_vector_array(y_pts)
+        self._est_transformation = gui.Button("Est. Motor")
+        self._est_transformation.set_on_clicked(self._on_est_transformation)
+
+        self._choose_algorithm = gui.Combobox()
+        self.alg_list,self.alg_names = algs.get_algorithms()
+        for i in range(len(self.alg_names)):
+            self._choose_algorithm.add_item(self.alg_names[i])
+        self._choose_algorithm.set_on_selection_changed(self._on_choose_algorithm)
+        self.algorithm = self.alg_list[0]
+
+        self._draw_spheres = gui.Button("Spheres")
+        self._draw_circles = gui.Button("Circles")
+        self._draw_arrows = gui.Button("Arrows")
+        self._draw_spheres.set_on_clicked(self._on_draw_spheres)
+        self._draw_circles.set_on_clicked(self._on_draw_circles)
+        self._draw_arrows.set_on_clicked(self._on_draw_arrows)
+        self._draw_spheres.toggleable = True
+        self._draw_circles.toggleable = True
+        self._draw_arrows.toggleable = True
+        self._draw_spheres.is_on = self._draw_primitives[0]
+        self._draw_circles.is_on = self._draw_primitives[1]
+        self._draw_arrows.is_on = self._draw_primitives[2]
+
+        # Use tab control as a ghost widget
+        # grid.add_child(gui.TabControl())
         
-        # Use the chosen algorithm to estimate the RT
-        T_est,R_est,P_lst,Q_lst = self.algorithm(x,y,self.n_points)
+        grid = gui.VGrid(2, 0.25 * em)
+        grid.add_child(gui.Label("Point Cloud"))
+        grid.add_child(self._point_cloud)
+        grid.add_child(gui.Label("Point Cloud Color"))
+        grid.add_child(self._point_cloud_color)
+        grid.add_child(gui.Label("Rotation Axis"))
+        grid.add_child(self._rot_axis)
+        grid.add_child(gui.Label("Translation Axis"))
+        grid.add_child(self._trans_axis)
+        grid.add_child(gui.Label("Rotation Angle"))
+        grid.add_child(self._rot_angle)
+        grid.add_child(gui.Label("Translation Mag."))
+        grid.add_child(self._trans_mag)
+        grid.add_child(gui.Label("Gaussian Noise"))
+        grid.add_child(self._gaussian_noise)
+        grid.add_child(self._update_primitives)
+        grid.add_child(self._est_transformation)
+        grid.add_child(self._show_point_cloud)
+        grid.add_child(gui.Label("   ")) # ghost widget
+        grid.add_child(gui.Label("Algorithms"))
+        grid.add_child(self._choose_algorithm)
 
-        t_est = -2*eo|T_est
-            
-        # Q_est = T_est*R_est*P*~R_est*~T_est
-        # q_bar = q.sum()/self.n_points
-        # q_bar_est = T_est*R_est*p.sum()*~R_est*~T_est/self.n_points
 
-        # print("Primitives Error:",pyga.mag_sq(P_I(Q_est - Q)).sum())
-        # print("Center of Mass of q:",q_bar)
-        # print("Center of Mass of q_est:",q_bar_est)
-        # print("Center of Mass diff :" , q_bar - q_bar_est)
 
-        # Save the list of eigenmultivectors
-        self.P_lst[0] = P_lst
-        self.P_lst[1] = Q_lst
-        
-        # Calculate the estimated point cloud from x and from y
-        # y_est = R_est*x*~R_est + t_est
-        x_est = ~R_est*(y - t_est)*R_est
-        
-        print_rigtr_error_metrics(R_est,self.R,T_est,self.T,self.n_points,self.sigma)
-        
-        x_pts = cga3d_vector_array_to_nparray(x_est)
+        rts_settings.add_child(grid)
 
-        self.pcd[2].points = o3d.utility.Vector3dVector(x_pts)
-        self.noisy_pcd[2] = copy.deepcopy(self.pcd[2])
+        grid = gui.VGrid(3,0.25*em)
+        grid.add_child(self._draw_spheres)
+        grid.add_child(self._draw_circles)
+        grid.add_child(self._draw_arrows)
+        grid.add_child(gui.Label("Arrows"))
+        grid.add_child(self._increase_arrows)
+        grid.add_child(self._decrease_arrows)
 
-    def get_default_algorithm(self):
-        return algorithms.estimate_transformation_0
+        rts_settings.add_child(grid)
 
-    def compute_primitives(self,j):
-        # Do not compute primitives if not drawing
-        if self.draw_primitives_bool[0] == False and  self.draw_primitives_bool[1] == False and self.draw_primitives_bool[2] == False:
-            return
-        x_pts = np.asarray(self.noisy_pcd[j].points)
-        
-        # Convert numpy array to multivector array
-        x = nparray_to_3dvga_vector_array(x_pts)
+        self._settings_panel.add_fixed(separation_height)
+        self._settings_panel.add_child(material_settings)
+        self._settings_panel.add_child(rts_settings)
 
-        # Convert to CGA
-        p = eo + x + (1/2)*pyga.mag_sq(x)*einf 
-
-        P_lst,lambda_P = get_3dcga_eigmvs(p,grades=self.eig_grades)
-        self.P_lst[j] = P_lst
         
 
-    
+        # ----
 
-    def draw_primitives(self,j):
-        self.remove_primitives(j)
-        if self.draw_primitives_bool[0] == False and self.draw_primitives_bool[1] == False and self.draw_primitives_bool[2] == False:
-            return
+        # Normally our user interface can be children of all one layout (usually
+        # a vertical layout), which is then the only child of the window. In our
+        # case we want the scene to take up all the space and the settings panel
+        # to go above it. We can do this custom layout by providing an on_layout
+        # callback. The on_layout callback should set the frame
+        # (position + size) of every child correctly. After the callback is
+        # done the window will layout the grandchildren.
+        w.set_on_layout(self._on_layout)
+        w.add_child(self._scene)
+        w.add_child(self._settings_panel)
 
-        # value = check_orthogonality(self.P_lst[0])
-        # value = check_orthogonality(self.P_lst[1])
+        # ---- Menu ----
+        # The menu is global (because the macOS menu is global), so only create
+        # it once, no matter how many windows are created
+        if gui.Application.instance.menubar is None:
+            if isMacOS:
+                app_menu = gui.Menu()
+                app_menu.add_item("About", AppWindow.MENU_ABOUT)
+                app_menu.add_separator()
+                app_menu.add_item("Quit", AppWindow.MENU_QUIT)
+            file_menu = gui.Menu()
+            file_menu.add_item("Open...", AppWindow.MENU_OPEN)
+            file_menu.add_item("Export Current Image...", AppWindow.MENU_EXPORT)
+            if not isMacOS:
+                file_menu.add_separator()
+                file_menu.add_item("Quit", AppWindow.MENU_QUIT)
+            settings_menu = gui.Menu()
+            settings_menu.add_item("Lighting & Materials",
+                                   AppWindow.MENU_SHOW_SETTINGS)
+            settings_menu.set_checked(AppWindow.MENU_SHOW_SETTINGS, True)
+            help_menu = gui.Menu()
+            help_menu.add_item("About", AppWindow.MENU_ABOUT)
 
-        for i in range(len(self.P_lst[j])):
-            d,l,radius_sq = get_properties(self.P_lst[j][i])
-            d_array = np.array(d)
-            if((d_array*d_array).sum() < 1E-12): # check if is sphere
-                if self.draw_primitives_bool[0]:
-                    primitive = self.get_sphere(radius_sq,l)
-                    self.scene.scene.add_geometry(str(j)+'primitive'+str(i),
-                                                  primitive,
-                                                  self.get_transparent_material(self.pc_color[j]))
+            menu = gui.Menu()
+            if isMacOS:
+                # macOS will name the first menu item for the running application
+                # (in our case, probably "Python"), regardless of what we call
+                # it. This is the application menu, and it is where the
+                # About..., Preferences..., and Quit menu items typically go.
+                menu.add_menu("Example", app_menu)
+                menu.add_menu("File", file_menu)
+                menu.add_menu("Settings", settings_menu)
+                # Don't include help menu unless it has something more than
+                # About...
             else:
-                if self.draw_primitives_bool[1]:    
-                    filled_circle,torus_mesh0,torus_mesh1 = self.create_circle(np.sqrt(abs(radius_sq)),l,d)
+                menu.add_menu("File", file_menu)
+                menu.add_menu("Settings", settings_menu)
+                menu.add_menu("Help", help_menu)
+            gui.Application.instance.menubar = menu
 
-                    self.scene.scene.add_geometry(str(j)+'primitive'+str(i),
-                                                filled_circle,
-                                                self.get_transparent_material(self.pc_color[j]))
+        # The menubar is global, but we need to connect the menu items to the
+        # window, so that the window can call the appropriate function when the
+        # menu item is activated.
+        w.set_on_menu_item_activated(AppWindow.MENU_OPEN, self._on_menu_open)
+        w.set_on_menu_item_activated(AppWindow.MENU_EXPORT,
+                                     self._on_menu_export)
+        w.set_on_menu_item_activated(AppWindow.MENU_QUIT, self._on_menu_quit)
+        w.set_on_menu_item_activated(AppWindow.MENU_SHOW_SETTINGS,
+                                     self._on_menu_toggle_settings_panel)
+        w.set_on_menu_item_activated(AppWindow.MENU_ABOUT, self._on_menu_about)
+        # ----
 
-                    self.scene.scene.add_geometry(str(j)+'unfilled_primitive0_'+str(i),
-                                                torus_mesh0,
-                                                self.get_solid_material(self.pc_color[j]))
-
-                    self.scene.scene.add_geometry(str(j)+'unfilled_primitive1_'+str(i),
-                                                torus_mesh1,
-                                                self.get_solid_material(self.pc_color[j]))
-
-            if self.draw_primitives_bool[2]:
-                A,B,C,D = get_coeffs(self.P_lst[j][i])
-                A = pyga.normalize_mv(A)
-                arrow = self.get_arrow(np.array(A.tolist(1)[0][:3]),scale=self.arrow_scale)
-                self.scene.scene.add_geometry(str(j)+'Arrow'+str(i),
-                                                    arrow,
-                                                    self.get_solid_material(self.pc_color[j]))
-                # print(np.array(A.tolist(1)[0][:3]))
-                
-        # print()
-
-    def remove_primitives(self,j):
-        for i in range(15):
-            self.scene.scene.remove_geometry(str(j)+'primitive'+str(i))
-            self.scene.scene.remove_geometry(str(j)+'unfilled_primitive1_'+str(i))
-            self.scene.scene.remove_geometry(str(j)+'unfilled_primitive0_'+str(i))
-            self.scene.scene.remove_geometry(str(j)+'Arrow'+str(i))
-
-
-if __name__ == '__main__':
-
-    sigma = 0.05
+        self._apply_settings()
+        
     
-    # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
+
+    def benchmark_init(self):
+        self.sigma = 0
+        self.translation_axis = np.zeros(3)
+        self.translation_magnitude = 0
+        self.rotation_angle = 0
+        self.rotation_axis = np.array([1,0,0])
+        self.point_clouds = []
+        self.pcd_index = 0
+        self._draw_primitives = [True,False,True] # Default values (spheres,circles,arrows)
+        self.target_idx = 0
+        self.source_idx = 1
+
+    def _apply_settings(self):
+        bg_color = [
+            self.settings.bg_color.red, self.settings.bg_color.green,
+            self.settings.bg_color.blue, self.settings.bg_color.alpha
+        ]
+        self._scene.scene.set_background(bg_color)
+        self._scene.scene.show_skybox(self.settings.show_skybox)
+        self._scene.scene.show_axes(self.settings.show_axes)
+        if self.settings.new_ibl_name is not None:
+            self._scene.scene.scene.set_indirect_light(
+                self.settings.new_ibl_name)
+            # Clear new_ibl_name, so we don't keep reloading this image every
+            # time the settings are applied.
+            self.settings.new_ibl_name = None
+        self._scene.scene.scene.enable_indirect_light(self.settings.use_ibl)
+        self._scene.scene.scene.set_indirect_light_intensity(
+            self.settings.ibl_intensity)
+        sun_color = [
+            self.settings.sun_color.red, self.settings.sun_color.green,
+            self.settings.sun_color.blue
+        ]
+        self._scene.scene.scene.set_sun_light(self.settings.sun_dir, sun_color,
+                                              self.settings.sun_intensity)
+        self._scene.scene.scene.enable_sun_light(self.settings.use_sun)
+
+        if self.settings.apply_material:
+            self._scene.scene.update_material(self.settings.material)
+            self.settings.apply_material = False
+
+        self._bg_color.color_value = self.settings.bg_color
+        self._show_skybox.checked = self.settings.show_skybox
+        self._show_axes.checked = self.settings.show_axes
+        self._use_ibl.checked = self.settings.use_ibl
+        self._use_sun.checked = self.settings.use_sun
+        self._ibl_intensity.int_value = self.settings.ibl_intensity
+        self._sun_intensity.int_value = self.settings.sun_intensity
+        self._sun_dir.vector_value = self.settings.sun_dir
+        self._sun_color.color_value = self.settings.sun_color
+        self._material_prefab.enabled = (
+            self.settings.material.shader == Settings.LIT)
+        c = gui.Color(self.settings.material.base_color[0],
+                      self.settings.material.base_color[1],
+                      self.settings.material.base_color[2],
+                      self.settings.material.base_color[3])
+        # self._material_color.color_value = c
+        self._point_size.double_value = self.settings.material.point_size
+
+    def _on_layout(self, layout_context):
+        # The on_layout callback should set the frame (position + size) of every
+        # child correctly. After the callback is done the window will layout
+        # the grandchildren.
+        r = self.window.content_rect
+        self._scene.frame = r
+        width = 17 * layout_context.theme.font_size
+        height = min(
+            r.height,
+            self._settings_panel.calc_preferred_size(
+                layout_context, gui.Widget.Constraints()).height)
+        self._settings_panel.frame = gui.Rect(r.get_right() - width, r.y, width,
+                                              height)
+
+    def _set_mouse_mode_rotate(self):
+        self._scene.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
+
+    def _set_mouse_mode_fly(self):
+        self._scene.set_view_controls(gui.SceneWidget.Controls.FLY)
+
+    def _set_mouse_mode_sun(self):
+        self._scene.set_view_controls(gui.SceneWidget.Controls.ROTATE_SUN)
+
+    def _set_mouse_mode_ibl(self):
+        self._scene.set_view_controls(gui.SceneWidget.Controls.ROTATE_IBL)
+
+    def _set_mouse_mode_model(self):
+        self._scene.set_view_controls(gui.SceneWidget.Controls.ROTATE_MODEL)
+
+    def _on_bg_color(self, new_color):
+        self.settings.bg_color = new_color
+        self._apply_settings()
+
+    def _on_show_skybox(self, show):
+        self.settings.show_skybox = show
+        self._apply_settings()
+
+    def _on_show_axes(self, show):
+        self.settings.show_axes = show
+        self._apply_settings()
+
+    def _on_use_ibl(self, use):
+        self.settings.use_ibl = use
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_use_sun(self, use):
+        self.settings.use_sun = use
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_lighting_profile(self, name, index):
+        if name != Settings.CUSTOM_PROFILE_NAME:
+            self.settings.apply_lighting_profile(name)
+            self._apply_settings()
+
+    def _on_new_ibl(self, name, index):
+        self.settings.new_ibl_name = gui.Application.instance.resource_path + "/" + name
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_ibl_intensity(self, intensity):
+        self.settings.ibl_intensity = int(intensity)
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_sun_intensity(self, intensity):
+        self.settings.sun_intensity = int(intensity)
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_sun_dir(self, sun_dir):
+        self.settings.sun_dir = sun_dir
+        self._profiles.selected_text = Settings.CUSTOM_PROFILE_NAME
+        self._apply_settings()
+
+    def _on_sun_color(self, color):
+        self.settings.sun_color = color
+        self._apply_settings()
+
+    def _on_shader(self, name, index):
+        self.settings.set_material(AppWindow.MATERIAL_SHADERS[index])
+        self._apply_settings()
+
+    def _on_material_prefab(self, name, index):
+        self.settings.apply_material_prefab(name)
+        self.settings.apply_material = True
+        self._apply_settings()
+
+    # def _on_material_color(self, color):
+    #     self.settings.material.base_color = [
+    #         color.red, color.green, color.blue, color.alpha
+    #     ]
+    #     self.settings.apply_material = True
+    #     self._apply_settings()
+
+    def _on_point_size(self, size):
+        self.settings.material.point_size = int(size)
+        self.settings.apply_material = True
+        self._apply_settings()
     
-    pcd = o3d.io.read_point_cloud(filename)
-    print(filename)
+
+
+    def _on_menu_open(self):
+        dlg = gui.FileDialog(gui.FileDialog.OPEN, "Choose file to load",
+                             self.window.theme)
+        dlg.add_filter(
+            ".ply .stl .fbx .obj .off .gltf .glb",
+            "Triangle mesh files (.ply, .stl, .fbx, .obj, .off, "
+            ".gltf, .glb)")
+        dlg.add_filter(
+            ".xyz .xyzn .xyzrgb .ply .pcd .pts",
+            "Point cloud files (.xyz, .xyzn, .xyzrgb, .ply, "
+            ".pcd, .pts)")
+        dlg.add_filter(".ply", "Polygon files (.ply)")
+        dlg.add_filter(".stl", "Stereolithography files (.stl)")
+        dlg.add_filter(".fbx", "Autodesk Filmbox files (.fbx)")
+        dlg.add_filter(".obj", "Wavefront OBJ files (.obj)")
+        dlg.add_filter(".off", "Object file format (.off)")
+        dlg.add_filter(".gltf", "OpenGL transfer files (.gltf)")
+        dlg.add_filter(".glb", "OpenGL binary transfer files (.glb)")
+        dlg.add_filter(".xyz", "ASCII point cloud files (.xyz)")
+        dlg.add_filter(".xyzn", "ASCII point cloud with normals (.xyzn)")
+        dlg.add_filter(".xyzrgb",
+                       "ASCII point cloud files with colors (.xyzrgb)")
+        dlg.add_filter(".pcd", "Point Cloud Data files (.pcd)")
+        dlg.add_filter(".pts", "3D Points files (.pts)")
+        dlg.add_filter("", "All files")
+
+        # A file dialog MUST define on_cancel and on_done functions
+        dlg.set_on_cancel(self._on_file_dialog_cancel)
+        dlg.set_on_done(self._on_load_dialog_done)
+        self.window.show_dialog(dlg)
+
+    def _on_file_dialog_cancel(self):
+        self.window.close_dialog()
+
+    def _on_load_dialog_done(self, filename):
+        self.window.close_dialog()
+        self.load(filename)
+
+    def _on_menu_export(self):
+        dlg = gui.FileDialog(gui.FileDialog.SAVE, "Choose file to save",
+                             self.window.theme)
+        dlg.add_filter(".png", "PNG files (.png)")
+        dlg.set_on_cancel(self._on_file_dialog_cancel)
+        dlg.set_on_done(self._on_export_dialog_done)
+        self.window.show_dialog(dlg)
+
+    def _on_export_dialog_done(self, filename):
+        self.window.close_dialog()
+        frame = self._scene.frame
+        self.export_image(filename, frame.width, frame.height)
+
+    def _on_menu_quit(self):
+        gui.Application.instance.quit()
+
+    def _on_menu_toggle_settings_panel(self):
+        self._settings_panel.visible = not self._settings_panel.visible
+        gui.Application.instance.menubar.set_checked(
+            AppWindow.MENU_SHOW_SETTINGS, self._settings_panel.visible)
+
+    def _on_menu_about(self):
+        # Show a simple dialog. Although the Dialog is actually a widget, you can
+        # treat it similar to a Window for layout and put all the widgets in a
+        # layout which you make the only child of the Dialog.
+        em = self.window.theme.font_size
+        dlg = gui.Dialog("About")
+
+        # Add the text
+        dlg_layout = gui.Vert(em, gui.Margins(em, em, em, em))
+        dlg_layout.add_child(gui.Label("Open3D GUI Example"))
+
+        # Add the Ok button. We need to define a callback function to handle
+        # the click.
+        ok = gui.Button("OK")
+        ok.set_on_clicked(self._on_about_ok)
+
+        # We want the Ok button to be an the right side, so we need to add
+        # a stretch item to the layout, otherwise the button will be the size
+        # of the entire row. A stretch item takes up as much space as it can,
+        # which forces the button to be its minimum size.
+        h = gui.Horiz()
+        h.add_stretch()
+        h.add_child(ok)
+        h.add_stretch()
+        dlg_layout.add_child(h)
+
+        dlg.add_child(dlg_layout)
+        self.window.show_dialog(dlg)
+
+    def _on_about_ok(self):
+        self.window.close_dialog()
 
     
-    # get 3D match point clouds
-    # base_dir =  f'/home/francisco/3dmatch/'
-    # cfg = load_3DMatch_PCs(base_dir)
-    # index = -123
-    # pcd,_ = get_point_clouds(cfg,base_dir,-123)
-    # print("index=",index)
-    # print("3D Match")
+    def _on_rot_axis(self, vec):
+        if (vec*vec).sum() == 0:
+            self.rotation_axis = np.array([1,0,0])
+        else:
+            self.rotation_axis = vec/np.sqrt((vec*vec).sum()) # Normalize to unity
+        self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        
+    def _on_trans_axis(self, vec):
+        self.translation_axis = vec
+        self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+    def _on_rot_angle(self,value):
+        self.rotation_angle = value/180*np.pi # convert to radians
+        self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
-    # Add outlier
-    # outlier = np.ones([1,3])*0.1
-    # pts = np.r_[np.asarray(tgt_pcd.points),outlier]
-    # tgt_pcd.points = o3d.utility.Vector3dVector(pts)
+    def _on_trans_mag(self,value):
+        self.translation_magnitude = value
+        self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
-    # Change color of target point cloud
-    pts = np.asarray(pcd.points)
-    ceofm = pts.mean(axis=0)
-    pcd.points = o3d.utility.Vector3dVector(pts - ceofm) # Put the center of mass of the bunnies at the origin
-    pcd_copy = copy.deepcopy(pcd)
+    def _on_gaussian_noise(self,value):
+        self.sigma = value
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i].update_gaussian_noise(self.sigma)
+            self.point_clouds[i].update_noisy_pcd(self._scene.scene,self.settings.material)
+
+    def _on_update_primitives(self):
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+        # for i in range(len(self.point_clouds[0].eigmvs)):
+        #     print(pyga.numpy_max(self.point_clouds[0].eigmvs[i] - self.point_clouds[1].eigmvs[i]))
+
+    def update_primitives_toggle(self):
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i]._draw_geometries = self._draw_primitives
+            self.point_clouds[i].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+    def _on_draw_spheres(self):
+        self._draw_primitives[0] = self._draw_spheres.is_on
+        self.update_primitives_toggle()
+
+    def _on_draw_circles(self):
+        self._draw_primitives[1] = self._draw_circles.is_on
+        self.update_primitives_toggle()
+
+    def _on_draw_arrows(self):
+        self._draw_primitives[2] = self._draw_arrows.is_on
+        self.update_primitives_toggle()
+
+    def update_gui_variables(self,index):
+        # Update the values of the variables
+        self.rotation_axis = self.point_clouds[index].rotation_axis
+        self.rotation_angle = self.point_clouds[index].rotation_angle
+        self.translation_magnitude = self.point_clouds[index].translation_magnitude
+        self.translation_axis = self.point_clouds[index].translation_axis
+        
+        # Update the values of the gui elements
+        self._rot_axis.vector_value = self.point_clouds[index].rotation_axis
+        self._rot_angle.double_value = self.point_clouds[index].rotation_angle/np.pi*180
+        self._trans_mag.double_value = self.point_clouds[index].translation_magnitude
+        self._trans_axis.vector_value = self.point_clouds[index].translation_axis 
+        color = self.point_clouds[index].color
+        # Set the gui color to the color of the selected point cloud
+        self._point_cloud_color.color_value = gui.Color(color[0],color[1],color[2],color[3])
+        # set the checkbox to the value of the selected point cloud
+        self._show_point_cloud.checked = self.point_clouds[index].show
+
+    def update_gui(self):
+        ''' Updates the variables and the values of the gui, with respect to the selected point cloud'''
+        self.update_gui_variables(self.pcd_index)
+
+    def _on_point_cloud(self,name,index):
+        self.pcd_index = index
+        self.update_gui()
+
+    def _on_show_point_cloud(self,checked):
+        '''Redraw the point cloud and its corresponding geometries'''
+        if self.pcd_index < len(self.point_clouds):
+            self.point_clouds[self.pcd_index].show = checked
+            self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
+            self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
+    def _on_est_transformation(self):
+        if len(self.point_clouds) >= 2:
+            for i in [self.source_idx,self.target_idx]: # update the eigenmultivectors of the source and target point clouds
+                self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+            M_est = self.algorithm(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx]) # Use the selected algorithm to determine the motor
+            
+            self.point_clouds[self.source_idx].apply_motor(M_est) # Apply transformation to the source point cloud
+            self.point_clouds[self.source_idx].update_axis_angle_from_motor()
+            if self.source_idx == self.pcd_index: # Update gui when the source point cloud is selected 
+                self.update_gui_variables(self.source_idx)
+            self.point_clouds[self.source_idx].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+    def _on_choose_algorithm(self,name,index):
+        self.algorithm = self.alg_list[index] 
+
+    def _on_point_cloud_color(self,color):
+        self.point_clouds[self.pcd_index].color = [ 
+            color.red, color.green, color.blue, color.alpha ]
+        self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
+        self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+    def _on_increase_arrows(self):
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i].arrow_scale *= 1.1
+            self.point_clouds[i].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+
+    def _on_decrease_arrows(self):
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i].arrow_scale /= 1.1
+            self.point_clouds[i].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
-    # draw_primitives: (spheres,circles,vectors)
-
-    viewer = PCViewer3D([pcd,pcd_copy],draw_primitives=[True,True,True],sigma=sigma,rdn_rbm=True,eig_grades=[1,2],compare_primitives=False)
-    # viewer.algorithm = algorithms.estimate_transformation_16
-    # viewer.algorithm = algorithms.estimate_transformation_4
-    viewer.algorithm = algorithms.estimate_transformation_14
-    viewer.update_model()
-
-    viewer.run()
-
-    '''
-
-    TODO:
-        - Copy name of dataset to the name of the plots.
 
 
-    pcd = o3d.io.read_point_cloud(f'/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply')
-    pts = np.asarray(pcd.points)
-    
-    n_points = pts.shape[0]
-    color = np.array([[0,0,0.5]]*n_points)
-    pcd.colors = o3d.utility.Vector3dVector(color)
-    pcd1 = copy.deepcopy(pcd)
-    color = np.array([[0.5,0,0]]*n_points)
-    pcd1.colors = o3d.utility.Vector3dVector(color)
+    def load(self, path):
+        ''' Reads a point cloud from path and creates two PointCloudSettings classes'''
 
-    # The viewer accepts two aligned pointclouds
-    # Applies a rigid transformation to pcd1 and tries to estimate the RBM
-    viewer = PCViewer3D([pcd,pcd1],draw_primitives=[True,False],sigma=0.0185,rdn_rbm=True)
-    viewer.run()
-    '''
+        self._scene.scene.clear_geometry()
+        pcd = o3d.io.read_point_cloud(path)
+        
+        # Put the center of mass of the dataset at the origin
+        pts = np.asarray(pcd.points)
+        ceofm = pts.mean(axis=0)
+        pcd.points = o3d.utility.Vector3dVector(pts - ceofm) 
+
+        n_pcds = 2
+        self.point_clouds = []
+
+        # Default colors for the point clouds
+        # color = cm.rainbow(np.linspace(0, 1, n_pcds+1))
+        color = [np.array([0,139,29,255])/255, np.array([0,39,255,255])/255]
+
+        self._point_cloud.clear_items()
+        # Add gaussian noise and update the point clouds
+        for i in range(n_pcds):
+            point_cloud = PointCloudSettings(pcd,i)
+            point_cloud.compute_pcd_normals()
+            point_cloud.update_gaussian_noise(self.sigma)
+            point_cloud.color = color[i]
+            point_cloud._draw_geometries = self._draw_primitives
+            point_cloud.show = True
+            point_cloud.update_noisy_pcd(self._scene.scene,self.settings.material)
+            self.point_clouds += [point_cloud]
+            self._point_cloud.add_item(str(i))
+        
+        self.update_gui()
+
+        bounds = self._scene.scene.bounding_box
+        self._scene.setup_camera(60, bounds, bounds.get_center())
+
+
+    def export_image(self, path, width, height):
+
+        def on_image(image):
+            img = image
+
+            quality = 9  # png
+            if path.endswith(".jpg"):
+                quality = 100
+            o3d.io.write_image(path, img, quality)
+
+        self._scene.scene.scene.render_to_image(on_image)
+
+
+def main():
+    # We need to initialize the application, which finds the necessary shaders
+    # for rendering and prepares the cross-platform window abstraction.
+    gui.Application.instance.initialize()
+
+    w = AppWindow(1024, 768)
+
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+        if os.path.exists(path):
+            w.load(path)
+        else:
+            w.window.show_message_box("Error",
+                                      "Could not open file '" + path + "'")
+
+    # Run the event loop. This will not return until the last window is closed.
+    gui.Application.instance.run()
+
+
+if __name__ == "__main__":
+    main()

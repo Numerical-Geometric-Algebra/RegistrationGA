@@ -19,10 +19,11 @@ basis = ga.basis()
 locals().update(basis)
 
 '''
-This script is an example that computes the decomposition of a bivector.
+This script tests the decomposition of a bivector. 
+Since the decomposition of bivectors is equivalent to the decomposition of skew transformations 
+we can also use a similar approach to compute the decomposition of a skew transformation 
 It works for any geometric algebra with positive signature!!
 '''
-
 
 n_samples = 10
 
@@ -39,5 +40,6 @@ for i in range(n_samples):
     for i in range(len(B_lst)):
         B_check += B_lst[i]
 
+    # Confirms if the obtained bivector is the same as the one given
     print("B diff:",pyga.numpy_max(B-B_check))
     

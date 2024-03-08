@@ -26,6 +26,17 @@ basis,rec_basis = pyga.get_ga_basis_vectors(ga)
 # This particular example only works when this value is set to an even number
 n_reflections = 2
 
+'''
+    This script determines the decomposition of a special orthogonal transformation H
+    as the composition of commuting simple rotations H = R1R2...Rm.  
+    It computes the bivector associated to the skew-symmetric part of the transformation B = d^H.
+    Then using the decomposition of a skew symmetric transformation it determines 
+    the 'complex' eigevalues and eigenvectors of H. 
+    The eigenvalues are the square of the simple rotors. 
+    Vi^2 = H(ai)ai^-1 where H(x) = V1V2...Vm x ~Vm...~V1~Vm
+    Note: It does not work for mixed signature geometric algebras. 
+'''
+
 for i in range(n_samples):
     # create random versor
     V = 1
@@ -44,7 +55,7 @@ for i in range(n_samples):
 
     # Determines if H_check is equal to H_diff    
     value = multiga.check_compare_funcs(H_check,H_diff,basis)
-    print("Compare Functions:",value)
+    print("Compare Functions:",value) 
     print(U*~V)
 
 

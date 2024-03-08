@@ -25,6 +25,17 @@ n_samples = 20
 basis,rec_basis = pyga.get_ga_basis_vectors(ga)
 n_reflections = 2
 
+'''
+    This script computes the versor U from a an orthogonal transformation H(x) = (-1)^m UxU^-1
+    It uses the eigendecomposition of the symmetric part of H. 
+    Then using the eigendecomposition it determines the the simple rotations and reflection
+    Ui = ai if it is a reflection
+    Ui = sqrt(H(ai)ai^-1) if it is a rotation
+    to check if it is a reflection we use the eigenvalue of H_plus, if it is equal to minus one 
+    then it must be a reflection
+'''
+
+
 for i in range(n_samples):
     # create random versor
     V = 1

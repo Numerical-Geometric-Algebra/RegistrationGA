@@ -304,6 +304,9 @@ def compute_eigvalues_from_eigvecs(V,H):
 
 
 def check_compare_funcs(F,G,basis):
+    ''' Computes the difference between the matrices associated to the functions F and G.
+        Using some basis bi, compute max_i,j (F(bi) - G(bi))|bj
+    '''
     values = []
     for i in range(len(basis)):
         values += [(F(basis[i])(1) - G(basis[i])(1)).tolist(1)[0]]
