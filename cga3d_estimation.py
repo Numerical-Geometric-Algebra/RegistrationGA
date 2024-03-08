@@ -503,6 +503,7 @@ def orient_multivectors(X,A):
     return X*scalar
 
 
+
 def get_rigtr_error_metrics(R,R_est,T,T_est):
     '''Computes error metrics between the rotation and translation and the ground truth'''
     t = -eo|T*2
@@ -533,6 +534,15 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
     t_angle_error = np.arccos(cos_trans)/np.pi*180
 
     return ang_error,t_mag_error,t_angle_error,phi
+
+def get_motor_metrics(M,M_est):
+    '''Computes error metrics between the rotation and translation and the ground truth'''
+    
+    T,R = decompose_motor(M)
+    T_est,R_est = decompose_motor(M_est)
+
+    return get_rigtr_error_metrics(R,R_est,T,T_est)
+    
 
 def print_rigtr_error_metrics(R,R_est,T,T_est,m_points=-1,sigma=-1):
     if(m_points > 0):

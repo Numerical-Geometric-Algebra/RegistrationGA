@@ -139,8 +139,8 @@ class Settings:
 
     def __init__(self):
         self.mouse_model = gui.SceneWidget.Controls.ROTATE_CAMERA
-        # self.bg_color = gui.Color(0.5, 0.5, 0.5)
-        self.bg_color = gui.Color(1, 1, 1) # Default to white backgroud
+        self.bg_color = gui.Color(0.5, 0.5, 0.5) # Grey background to not kill the eyes!!!
+        # self.bg_color = gui.Color(1, 1, 1) # Default to white backgroud
         self.show_skybox = False
         self.show_axes = False
         self.use_ibl = True
@@ -228,15 +228,6 @@ class PointCloudSettings:
         self.eigbivs = []
         self.eigvecs = []
         self.show = True
-
-    def compute_transformation(self): 
-        ''' Determines the rotation matrix and translation matrix'''
-        translation_vector = self.translation_magnitude*self.translation_axis
-        
-        # Compute the rotor: Rotor = cos(angle) + I*axis*sin(angle)
-        Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
-        rotation_matrix = rotor3d_to_matrix(Rotor)
-        return translation_vector,rotation_matrix,Rotor
 
     def compute_motor(self):
         ''' Computes a motor from the axis angle and translation vector''' 
@@ -449,9 +440,6 @@ class PointCloudSettings:
         self.translation_magnitude = (t_normalized|t)(0)
         self.rotation_axis = np.array(a.tolist(1)[0][:3])
         self.rotation_angle = theta*2
-        print("trans vector",t)
-        print("rot axis",a)
-        print("rot angle",theta)
 
     def update_geometries(self,scene,material,transp_mat):
         self.compute_eigmvs()
@@ -829,7 +817,7 @@ class AppWindow:
         self._update_primitives = gui.Button("Update Primitives")
         self._update_primitives.set_on_clicked(self._on_update_primitives)
         
-        self._show_point_cloud = gui.Checkbox("Point Cloud")
+        self._show_point_cloud = gui.Checkbox("Show Point Cloud")
         self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
 
         self._est_transformation = gui.Button("Est. Motor")
@@ -879,9 +867,6 @@ class AppWindow:
         grid.add_child(gui.Label("   ")) # ghost widget
         grid.add_child(gui.Label("Algorithms"))
         grid.add_child(self._choose_algorithm)
-
-
-
         rts_settings.add_child(grid)
 
         grid = gui.VGrid(3,0.25*em)
@@ -891,14 +876,29 @@ class AppWindow:
         grid.add_child(gui.Label("Arrows"))
         grid.add_child(self._increase_arrows)
         grid.add_child(self._decrease_arrows)
+        rts_settings.add_child(grid)
 
+        # Grid for point registration metrics
+        grid = gui.VGrid(2, 0.25 * em)
+        self._rot_angle_error = gui.Label("")
+        self._trans_mag_error = gui.Label("")
+        
+        self._str_ang_error = gui.Label("Rotation error (RRE):")
+        self._str_trans_mag_error = gui.Label("Translation error (RTE):")
+        self._str_ang_error.visible = False
+        self._str_trans_mag_error.visible = False
+
+        grid.add_child(self._str_ang_error)
+        grid.add_child(self._rot_angle_error)
+        grid.add_child(self._str_trans_mag_error)
+        grid.add_child(self._trans_mag_error)
         rts_settings.add_child(grid)
 
         self._settings_panel.add_fixed(separation_height)
         self._settings_panel.add_child(material_settings)
         self._settings_panel.add_child(rts_settings)
 
-        
+        self.rts_settings = rts_settings
 
         # ----
 
@@ -977,8 +977,8 @@ class AppWindow:
         self.point_clouds = []
         self.pcd_index = 0
         self._draw_primitives = [True,False,True] # Default values (spheres,circles,arrows)
-        self.target_idx = 0
-        self.source_idx = 1
+        self.target_idx = 1
+        self.source_idx = 0
 
     def _apply_settings(self):
         bg_color = [
@@ -1316,20 +1316,35 @@ class AppWindow:
         if len(self.point_clouds) >= 2:
             for i in [self.source_idx,self.target_idx]: # update the eigenmultivectors of the source and target point clouds
                 self.point_clouds[i].update_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
-            M_est = self.algorithm(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx]) # Use the selected algorithm to determine the motor
+            # Use the selected algorithm to determine the motor that transforms the source into the target
+            M_est = self.algorithm(self.point_clouds[self.source_idx],self.point_clouds[self.target_idx]) 
             
+            # The ground truth motor (that transforms the source into the target)
+            M = self.point_clouds[self.target_idx].Motor*~self.point_clouds[self.source_idx].Motor 
+            self.print_metrics(M,M_est)
+
             self.point_clouds[self.source_idx].apply_motor(M_est) # Apply transformation to the source point cloud
             self.point_clouds[self.source_idx].update_axis_angle_from_motor()
             if self.source_idx == self.pcd_index: # Update gui when the source point cloud is selected 
                 self.update_gui_variables(self.source_idx)
             self.point_clouds[self.source_idx].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
+    def print_metrics(self,M,M_est):
+        ang_error,t_mag_error,_,_ = get_motor_metrics(M,M_est)
+        
+        # f"{ang_error:.9f}"
+        self._rot_angle_error.text = '%.5E' % ang_error
+        self._trans_mag_error.text = '%.5E' % t_mag_error
+        self._str_ang_error.visible = True
+        self._str_trans_mag_error.visible = True
+        self.window.set_needs_layout()
+
     def _on_choose_algorithm(self,name,index):
         self.algorithm = self.alg_list[index] 
 
     def _on_point_cloud_color(self,color):
         self.point_clouds[self.pcd_index].color = [ 
-            color.red, color.green, color.blue, color.alpha ]
+            color.red, color.green, color.blue, color.alpha]
         self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
         self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
