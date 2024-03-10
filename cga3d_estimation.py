@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-import gasparsegen
+import gasparse
 import geo_algebra as pyga
 import multilinear_algebra as multiga
-from gasparsegen import multivector as mv
+from gasparse import multivector as mv
 import numpy as np
 import math
 
-vga3d = gasparsegen.GA(3,compute_mode='generated')
-cga3d = gasparsegen.GA(4,1,compute_mode='generated') # Use 3D conformal geometric algebra
+vga3d = gasparse.GA(3,compute_mode='generated')
+cga3d = gasparse.GA(4,1,compute_mode='generated') # Use 3D conformal geometric algebra
 basis = cga3d.basis()
 locals().update(basis) # Update all of the basis blades variables into the environment
 

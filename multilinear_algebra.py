@@ -1,6 +1,6 @@
 import numpy as np
 import geo_algebra as pyga
-from gasparsegen import multivector as mv
+from gasparse import multivector as mv
 
 
 def get_matrix(F,basis,rec_basis):
@@ -227,69 +227,6 @@ def compute_versor_skew(F,basis,rec_basis):
         i += 1
     return V
 
-
-def some_algorithm():
-    # while i < len(a):
-    #     if(pyga.check_null_mv(a[i])):
-    #         i += 1
-    #         print("Null vector")
-    #         continue
-    #     Vi_sq = F(a[i])*pyga.inv(a[i])
-    #     # print("Vi_sq:",Vi_sq)
-    #     # print(Vi_sq)
-    #     # V *= Vi
-
-    #     # if Vi_sq(0) < -0.9999: # Check if it is a reflection
-    #     #     A_temp = A^a[i]
-            
-    #     #     if pyga.numpy_max(A_temp) > 0.00001:
-    #     #         # Check if it is linearly independent
-    #     #         A = A_temp
-    #     #     i += 1
-
-    #     if abs(lambda_G[i]) > 1e-10:
-    #         if pyga.check_null_mv(Vi_sq(2)):
-    #             # Null bivectors only appear one time
-    #             V *= 1 + Vi_sq(2)/2 # The sqrt of a parabolic rotation
-    #         elif Vi_sq(0) > -0.9999: # it is not a reflection
-    #             A ^= Vi_sq(2)
-    #             # print(A)
-    #             print("Vi_sq=",Vi_sq)
-    #             # Non null bivectors appear two times
-    #             V *= pyga.rotor_sqrt(Vi_sq)
-    #             i += 1 # skip next iteration
-    #     i += 1
-    
-
-
-    # Find the space where the rotors apply the rotation
-    # for i in range(len(a)):
-    #     Vi_sq = F(a[i])*pyga.inv(a[i])
-    #     if Vi_sq(0) > -0.9999:
-    #         A_temp = A^a[i]
-    #         if pyga.numpy_max(A_temp) > 0.00001: # Check if it is linearly independent
-    #             A = A_temp
-
-
-    ''' When the a[i]'s do not form a basis for the entire linear space
-        then we must find the other elements
-    '''
-    # B = 1
-    # for i in range(len(a)):
-    #     B_temp = B^a[i]
-    #     if pyga.numpy_max(B_temp) > 0.00001:
-    #         # Check if it is linearly independent
-    #         B = B_temp
-    # # print("B=",B)
-    # if mv.grade(B) == mv.grade(pss)-1:
-    #     a0 = pss*B
-    #     Vi_sq = F(a0)*pyga.inv(a0)
-    #     if Vi_sq(0) < -0.9:
-    #         A ^= a0
-    # # print("A=",A)
-    # V = pyga.normalize_mv(V*A)
-    # sign = (-1)**mv.grade(A)
-    # return V,sign
     
 def compute_eigvalues_from_eigvecs(V,H):
     eigvalues = []

@@ -13,7 +13,7 @@ import multilinear_algebra as multiga
 
 np.set_printoptions(linewidth=np.inf)
 p,q = 6,0
-ga = gasparsegen.GA(p,q)
+ga = gasparse.GA(p,q)
 print("Geometric Algebra Initialized!!")
 basis = ga.basis()
 locals().update(basis)

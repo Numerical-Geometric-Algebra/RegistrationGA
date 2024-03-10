@@ -2,6 +2,7 @@ from cga3d_estimation import *
 import open3d as o3d
 import pickle
 from plot_benchmarks import plot_benchmarks,plot_histogram
+import plot_benchmarks as plt_bench
 from datetime import datetime
 from algorithms import *
 import os
@@ -70,7 +71,7 @@ def run_experiments(pts,experiments,algorithms):
     i = 0
     for exp in experiments:
         print("Experiment",i,"of",len(experiments),":",exp)
-        benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['rigid_trans'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
+        benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['motor'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
 
         # Saves the worst and the best without filtering results
         for j in range(len(benchmark_worst_array)):
@@ -92,7 +93,7 @@ def run_experiments(pts,experiments,algorithms):
     return (bench_rot,bench_pos,bench_posangle)
 
 def run_single_experiment(pts,exp,algorithms):
-    benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['rigid_trans'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
+    benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['motor'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
     return benchmark_values
 
 
@@ -123,7 +124,7 @@ def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,t
             R,T = gen_pseudordn_rigtr(rotanglei,tscalingi)
             U = T*R
 
-        dct['rigid_trans'] = U
+        dct['motor'] = U
         dct['sigma'] = get_value(sigma,i)
         dct['n_iters'] = get_value(niters,i)
         dct['n_outliers'] = get_value(noutliers,i)
@@ -132,7 +133,8 @@ def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,t
         
     return lst
 
-def save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename):
+
+def multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename):
     bench_rot,bench_pos,bench_posangle = benchmark_values
     now = datetime.now()
     dt_string = now.strftime('_%d_%m_%Y_%H_%M_%S')
@@ -149,15 +151,21 @@ def save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_
     dct["xlabel_str"] = xlabel_str
     dct["dt_string"] = dt_string
     dct["filename"] = filename # Important!! Do not lose the filename!!
-    
 
-    filename = "Benchmarks/benchmark_" + fig_name_end + dt_string + ".pickle"
+
+    return dct,fig_name_end+dt_string
+
+def save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename):
+    
+    dct,fig_name_end = multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+
+    filename = "Benchmarks/benchmark_" + fig_name_end + ".pickle"
     with open(filename,"wb") as f:
         pickle.dump(dct,f)
 
     return filename
 
-def save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigma):
+def single_experiment_to_dct(benchmark_values,algorithms,fig_name_end,filename,sigma):
     bench_rot,bench_pos,_,_ = benchmark_values
     now = datetime.now()
     dt_string = now.strftime('_%d_%m_%Y_%H_%M_%S')
@@ -171,7 +179,12 @@ def save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sig
     dct["dt_string"] = dt_string
     dct["filename"] = filename # Important!! Do not lose the filename!!
 
-    filename = "Benchmarks/benchmark_single_" + fig_name_end + dt_string + ".pickle"
+    return dct,fig_name_end + dt_string
+
+def save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigma):
+    dct,fig_name_end = single_experiment_to_dct(benchmark_values,algorithms,fig_name_end,filename,sigma)
+
+    filename = "Benchmarks/benchmark_single_" + fig_name_end + ".pickle"
     with open(filename,"wb") as f:
         pickle.dump(dct,f)
     
@@ -184,68 +197,39 @@ def get_name_filepath(filepath):
 
 if __name__ == '__main__':
 
-    show_plot = True
-    save_data = True
+    show_plot = True # Set to true to show the plots imediatly 
+    save_data = False # Set to true to save a .pickle file with the data, saves in the Benchmark folder
+    save_plot = False # Set to true to save the plot (needs show_plot = True), saves in the Plots folder
+    
+    # uncomment/comment if prefer dark background
+    plt_bench.set_dark_background()
 
+    # Chose the point cloud that is being benchmarked
     # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
     # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
+    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply" 
 
     pcd = o3d.io.read_point_cloud(filename)
     pts = np.asarray(pcd.points)
 
     algorithms = []
-    algorithms += [estimate_transformation_4] # Baseline, works well most of the time
-    algorithms += [estimate_transformation_14] # Exact translation
+    algorithms += [estimate_transformation_VGA] # Baseline, works well most of the time
+    algorithms += [estimate_transformation_CGA] # Propose algorithm
     algorithms += [estimate_transformation_ICP] # Iterative Closest points
     algorithms += [estimate_transformation_pasta] # PASTA
     
-    
-    '''Create dictionary for increasing number of outliers '''
-    # rot_angle = 100
-    # trans_scaling = 3
-    # niters = 10
-    # noutliers = np.arange(0,51,1)
-    # experiments = get_outliers_experiments(noutliers,0,rot_angle,trans_scaling,niters,0.1)
-    # x_axis = noutliers
-    # xlabel_str = "number of outliers"
-
-    # # Create dictionary for increasing the distance of an outlier
-    # rot_angle = 100
-    # trans_scaling = 3
-    # niters = 10
-    # max_dist_outlier = np.arange(0.0001,3,0.05)
-    # experiments = get_max_dist_outliers_experiments(5,0,rot_angle,trans_scaling,niters,max_dist_outlier)
-    # x_axis = max_dist_outlier
-    # xlabel_str = "outlier max distance"
-
-    '''Increasing the MAGNITUDE of the translation'''
-    # trajectory = False
-    # niters = 1
-    # rotangle = None
-    # sigmas = 0
-    # # tscaling = [0.001,1,2,3,4,5,6,7,8,9,10,15,25,50,100]
-    # # tscaling = np.arange(0.000,10.1,0.5)
-    # tscaling = np.arange(0.000,5,0.1)
-    # # tscaling = [0.0001,0.001,0.01,0.1,1,5,10]
-    # # tscaling = [1,2,3,4,5,6]
-    # # tscaling = [0.0001,5,10,15,20,25,30,35]
-    # n_exps = len(tscaling)
-    # x_axis = tscaling
-    # xlabel_str = r'Translation Magnitude $\|\mathbf{t}\|$'
-    # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_varpos"
 
     ''' Defining a random trajectory'''
-    trajectory = True
-    niters = 1000
-    ###### Rotation angle and translation increments for each experience
-    rotangle = 10
-    tscaling = 0.01
-    n_exps = 30
-    sigmas = 0.01
-    x_axis = np.arange(n_exps)
-    xlabel_str = "Iteration"
-    fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory_"
+    # trajectory = True
+    # niters = 1
+    # ###### Rotation angle and translation increments for each experience
+    # rotangle = 10
+    # tscaling = 0.01
+    # n_exps = 1
+    # sigmas = 0.01
+    # x_axis = np.arange(n_exps)
+    # xlabel_str = "Iteration"
+    # fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_trajectory_"
 
     '''DUMMY experiments'''
     # niters = 1
@@ -259,38 +243,45 @@ if __name__ == '__main__':
     # trajectory = False
 
     '''Increasing the NOISE of the point clouds'''
-    # trajectory = False
-    # niters = 1000
-    # tscaling = 1
-    # rotangle = None # Set to none for random rotation angle
-    # sigmas = np.arange(0.000,0.0500001,0.001)
-    # n_exps = len(sigmas)
-    # x_axis = sigmas
-    # xlabel_str = r'Noise ($\sigma$)'
-    # fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
+    trajectory = False # The rotation and translations are not cummulative
+    niters = 10 # Number of iterations for each experiment
+    tscaling = 1 # The magnitude of the translation
+    rotangle = None # Set to none for random rotation angle
+    sigmas = np.arange(0.000,0.0300001,0.001) # The different levels of noise to test against
+    n_exps = len(sigmas) # Number of experiments
+
+    x_axis = sigmas
+    xlabel_str = r'Noise ($\sigma$)'
+    fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
 
     experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
     benchmark_values = run_experiments(pts,experiments,algorithms)
     
-    filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
-    
-    # with open(filename_bench, "rb") as f:
-    #     dct = pickle.load(f)
-    # plot_benchmarks(dct,show_plot)
+    if save_data:
+        filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+    if show_plot:
+        dct,_ = multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+        plot_benchmarks(dct,save_plot)
 
 
-    '''Single Experiment (Histogram Plot)'''
-    sigmas_lst = [0,0.001,0.005,0.01,0.02]
-    for i in range(len(sigmas_lst)):
-        print("Experiment",i,"for histogram")
-        sigmas = sigmas_lst[i]
-        print("sigma =",sigmas)
-        fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_"
-        niters = 1000
-        experiments = get_experiments(n_exps=1,niters=niters,sigma=sigmas,tscaling=1,rotangle=None,noutliers=0,maxoutlier=0,trajectory=False)
-        benchmark_values = run_single_experiment(pts,experiments[0],algorithms)
-        filename_pickle = save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigmas)
+    '''Generate data for multiple histogram plots '''
+    # sigmas_lst = [0,0.001,0.005,0.01,0.02,0.03] # Chose multiple levels of noise to compare
+    # niters = 10
+    # for i in range(len(sigmas_lst)):
+    #     print("Experiment",i,"for histogram")
+    #     sigmas = sigmas_lst[i]
+    #     print("sigma =",sigmas)
+    #     fig_name_end = "sigma_" + str(sigmas).replace('.','_') + "_"
         
-        # with open(filename_pickle, "rb") as f:
-        #     dct = pickle.load(f)
-        # plot_histogram(dct) # creates an histogram for the data and saves in a file
+    #     experiments = get_experiments(n_exps=1,niters=niters,sigma=sigmas,tscaling=1,rotangle=None,noutliers=0,maxoutlier=0,trajectory=False)
+        
+    #     benchmark_values = run_single_experiment(pts,experiments[0],algorithms)
+    #     if save_data:
+    #         filename_pickle = save_single_experiment(benchmark_values,algorithms,fig_name_end,filename,sigmas)
+    #     if show_plot:
+    #         dct,_ = single_experiment_to_dct(benchmark_values,algorithms,fig_name_end,filename,sigmas)
+    #         plot_histogram(dct,save_plot=save_plot)
+        
+    if show_plot:
+        plt_bench.show_plots()
+

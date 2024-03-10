@@ -14,7 +14,7 @@ import multilinear_algebra as multiga
 
 np.set_printoptions(linewidth=np.inf)
 
-ga = gasparsegen.GA(8,compute_mode='large')
+ga = gasparse.GA(8,compute_mode='large')
 print("Geometric Algebra Initialized!!")
 basis = ga.basis()
 locals().update(basis)

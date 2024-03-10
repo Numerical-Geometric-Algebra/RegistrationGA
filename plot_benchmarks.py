@@ -212,7 +212,7 @@ def plot_axis(ax,yaxis,yerror,xaxis,colors,capsize,alg_names,marker_style):
 
     
 
-def plot_experiments_666(dcts,titles,nbins=30,rot_range=None,pos_range=None):
+def plot_experiments_multi_hists(dcts,titles,nbins=30,rot_range=None,pos_range=None):
     ratio = [2275,610]
     dpi = 96
 
@@ -254,7 +254,7 @@ def plot_experiments_666(dcts,titles,nbins=30,rot_range=None,pos_range=None):
     plt.show()
 
 
-def plot_experiments_9999(dcts,titles):
+def plot_experiments_multi_plots(dcts,titles):
     # plt.style.use('dark_background')
     ratio = [2275,610]
     dpi = 96
@@ -319,8 +319,8 @@ def check_if_in_list(a,list):
             return True
     return False
 
-def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None):
-    
+def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None,save_plot=False):
+    ''' Plots a single histogram '''
 
     sigma = dct["sigma"]
     bench_rot = dct["bench_rot"]
@@ -331,48 +331,38 @@ def plot_histogram(dct,nbins=100,rot_range=None,pos_range=None):
 
     fig_name = "histogram_" + fig_name_end + dt_string
     
-    
     color = cm.rainbow(np.linspace(0, 1, len(algorithms)))
     label = []
     for i in range(len(algorithms)):
         label += [get_algorithm_name(algorithms[i])]
 
-
-    set_font_size()
+    # set_font_size()
 
     fig,(ax1,ax2) = plt.subplots(2,figsize=(ratio[0]*scale, ratio[1]*scale))
+    fig.suptitle(r"$\sigma=$"+str(sigma))
 
     # Plot translation
     ax1.hist(bench_pos.T,nbins,histtype='bar',label=label,color=color,range=pos_range)
     ax1.set_xlabel("Translation Error (m)")
     ax1.set_ylabel("Frequency")
     ax1.legend()
-
-
-    start, end = ax1.get_xlim()
-
-    # num_ticks = 4
-    # xticks = np.linspace(0,end,num_ticks)
-
-    # stepsize = 0.001
-    # xticks = np.arange(0, end, stepsize)
-    # ax1.set_xticks(xticks)
     
-
     # Plot rotation
     ax2.hist(bench_rot.T,nbins,histtype='bar',label=label,color=color,range=rot_range)
     ax2.set_xlabel(r"Rotation Error ($\degree$)")
     ax2.set_ylabel("Frequency")
-    # ax2.legend()
-
-
+    ax2.legend()
 
     plt.tight_layout()
-    plt.savefig("Plots/" + fig_name + ".pdf",bbox_inches="tight")
+    if save_plot:
+        plt.tight_layout()
+        plt.savefig("Plots/" + fig_name + ".pdf",bbox_inches="tight")
 
-    # plt.show()
     
 def filter_dictionary_single_exp(dct,alg_names):
+    ''' Used to filter out unwanted algorithms
+        alg_names are the algorithms we want to show
+    '''
     bench_rot = dct["bench_rot"]
     bench_pos = dct["bench_pos"]
     algorithms = dct["algorithms"]
@@ -394,6 +384,8 @@ def filter_dictionary_single_exp(dct,alg_names):
     return dct
 
 def filter_dictionary(dct,alg_names):
+    ''' Used to filter out unwanted algorithms
+        alg_names are the names of the algorithms we want to show'''
     bench_rot = dct["bench_rot"]
     bench_pos = dct["bench_pos"]
     algorithms = dct["algorithms"]
@@ -425,12 +417,12 @@ def filter_dictionary(dct,alg_names):
     return dct
     
 def plot_multiple_benchmarks():
+    '''Reads multiple benchmark files and plots things in the same figure'''
     
+    # Chose multiple algorithms
     alg_names = ["ICP","CGA eigmvs","PASTA 3D"]
-    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_28_02_2024_21_58_51.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"]
-    
+
+    # Chose multiple files    
     filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_bun_zipper_res2_05_03_2024_04_06_37.pickle",
                  f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle",
                  f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_dragonMouth5_0_05_03_2024_16_11_04.pickle"]
@@ -443,12 +435,13 @@ def plot_multiple_benchmarks():
         dct = filter_dictionary(dct,alg_names)
         dcts += [dct]
 
-    plot_experiments_9999(dcts,titles)
+    plot_experiments_multi_plots(dcts,titles)
 
 
 def plot_multiple_histograms():
     alg_names = ["VGA CeofMass","CGA eigmvs"]
 
+    # Chose multiple files
     filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle",
                  f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle",
                  f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01_ArmadilloBack_0_05_03_2024_10_52_47.pickle",
@@ -459,9 +452,6 @@ def plot_multiple_histograms():
     rot_range = [None,None,(0,0.8),(0,2)]
     pos_range = [None,None,(0,0.0015),(0,0.0035)]
 
-    # rot_range = [None,None,(179,180),(178,180)]
-    # pos_range = None
-
     dcts = []
     for i in range(len(filenames)):
         with open(filenames[i], "rb") as f:
@@ -469,16 +459,15 @@ def plot_multiple_histograms():
         dct = filter_dictionary_single_exp(dct,alg_names)
         dcts += [dct]
 
-    plot_experiments_666(dcts,titles,pos_range=pos_range,rot_range=rot_range)
+    plot_experiments_multi_hists(dcts,titles,pos_range=pos_range,rot_range=rot_range)
     
+def set_dark_background():
+    plt.style.use('dark_background')
+
+def show_plots():
+    plt.show()
 
 def plot_benchmarks(dct,show_plot=False):
-    # with open(filename, "rb") as f:
-    #     dct = pickle.load(f)
-
-    # plt.style.use('dark_background')
-    # plt.style.use('bmh')    
-    # print(plt.style.available) # prints available styles
 
     bench_rot = dct["bench_rot"]
     bench_posangle = dct["bench_posangle"]
@@ -488,10 +477,6 @@ def plot_benchmarks(dct,show_plot=False):
     fig_name_end = dct["fig_name_end"]
     xlabel_str = dct["xlabel_str"]
     dt_string = dct["dt_string"]
-    
-    # angle_error_str = r"$\arccos(\mathbf{R}^{\dagger}*\widehat{\mathbf{R}})$ ($\degree$)"
-    # pos_error_str = r"$\|\mathbf{t} - \hat{\mathbf{t}}\|$"
-    # posangle_error_str = r"$\arccos(\widehat{\mathbf{t}}\cdot\hat{\mathbf{t}})$ ($\degree$)"
 
     angle_error_str = r"RRE ($\degree$)"
     pos_error_str = r"RTE (m)"
@@ -514,41 +499,21 @@ def plot_benchmarks(dct,show_plot=False):
     plot_experiments_3(bench_rot,x_axis,angle_error_str,xlabel_str,algorithms,filled_marker_style,capsize,rot_file_name,legend=legend)
     plot_experiments_3(bench_pos,x_axis,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,pos_file_name,legend=legend)
 
-    # Plots the worst experiments in the same figure
-    # plot_experiments_5(bench_rot,bench_pos,x_axis,angle_error_str,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,worst_filename)
-
 if __name__ == "__main__":
     alg_names = ["CGA eigmvs","VGA CeofMass"]
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_01_03_2024_04_03_08.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_12_59_02.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_02_2024_02_03_35.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_29_02_2024_07_01_11.pickle"
     
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle"
-    # with open(filename, "rb") as f:
-    #     dct = pickle.load(f)
-    # dct = filter_dictionary(dct,alg_names)
-    # plot_benchmarks(dct)
+    ''' Load a pickle file and plot the data'''
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle"
+    with open(filename, "rb") as f:
+        dct = pickle.load(f)
+    dct = filter_dictionary(dct,alg_names)
+    plot_benchmarks(dct)
     
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_01_03_2024_04_20_19.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_05ArmadilloBack_0_29_02_2024_13_00_45.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01ArmadilloBack_0_29_02_2024_02_28_25.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01dragonMouth5_0_29_02_2024_07_32_06.pickle"
-    
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_02_ArmadilloBack_0_05_03_2024_11_14_47.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle"
-    # # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
-    # with open(filename, "rb") as f:
-    #     dct = pickle.load(f)
-    # dct = filter_dictionary_single_exp(dct,alg_names)
-    # # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
-    # # plot_histogram(dct,nbins=30,rot_range=(0,3.5),pos_range=(0,0.01))
-    # # plot_histogram(dct,nbins=30,rot_range=(0,2),pos_range=(0,0.003))
-    # plot_histogram(dct,nbins=30)
+    ''' Load a pickle file and plot an histogram '''
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
+    with open(filename, "rb") as f:
+        dct = pickle.load(f)
+    dct = filter_dictionary_single_exp(dct,alg_names)
+    plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
 
-    # plt.show()
-
-
-    plot_multiple_benchmarks()
-    # plot_multiple_histograms()
-
+    plt.show()
