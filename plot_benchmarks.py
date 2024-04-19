@@ -256,9 +256,9 @@ def plot_experiments_multi_hists(dcts,titles,nbins=30,rot_range=None,pos_range=N
 
 def plot_experiments_multi_plots(dcts,titles):
     # plt.style.use('dark_background')
-    ratio = [2275,610]
+    ratio = [2275,810]
     dpi = 96
-    print(dcts[0]["xlabel_str"])
+    
     algorithms = dcts[0]["algorithms"]
 
     set_font_size(20,24,26)
@@ -285,19 +285,30 @@ def plot_experiments_multi_plots(dcts,titles):
         
 
     
-    axarr[0][1].legend()
+    # axarr[0][1].legend()
+    y_pos = 2
+    axarr[0][1].legend(loc='upper center', bbox_to_anchor=(0.5, y_pos),
+                ncol=3, fancybox=True, shadow=True)
 
     axarr[0][0].set_ylabel(r"RRE ($\degree$)")
     axarr[1][0].set_ylabel(r"RTE (m)")
 
     
-        
+    
     # plt.grid()
 
     # axarr[0][1].ticklabel_format(axis='y', style='sci', scilimits=(-3,-6))
 
     plt.tight_layout()
-    plt.subplots_adjust(top=0.937,bottom=0.12,left=0.044,right=0.995,hspace=0.16,wspace=0.093)
+    plt.subplots_adjust(top=0.699,
+                        bottom=0.095,
+                        left=0.049,
+                        right=0.995,
+                        hspace=0.2,
+                        wspace=0.11)
+    # plt.subplots_adjust(top=0.937,bottom=0.12,left=0.044,right=0.995,hspace=0.16,wspace=0.093)
+    # fig.subplots_adjust(right=0.75)
+
     # loc='upper center', bbox_to_anchor=(0.5, 1.4),ncol=1, fancybox=True, shadow=True
 
     plt.show()
@@ -420,26 +431,26 @@ def plot_multiple_benchmarks():
     '''Reads multiple benchmark files and plots things in the same figure'''
     
     # Chose multiple algorithms
-    alg_names = ["ICP","CGA eigmvs","PASTA 3D"]
+    alg_names = ["ICP","CGA-EVD","PASTA 3D"]
 
     # Chose multiple files    
-    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_bun_zipper_res2_05_03_2024_04_06_37.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_dragonMouth5_0_05_03_2024_16_11_04.pickle"]
+    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_18_04_2024_15_40_31.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle",
+                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_18_04_2024_17_09_10.pickle"]
 
     titles = ["Bunny","Armadillo","Dragon"]
     dcts = []
     for i in range(len(filenames)):
         with open(filenames[i], "rb") as f:
             dct = pickle.load(f)
-        dct = filter_dictionary(dct,alg_names)
+        # dct = filter_dictionary(dct,alg_names)
         dcts += [dct]
 
     plot_experiments_multi_plots(dcts,titles)
 
 
 def plot_multiple_histograms():
-    alg_names = ["VGA CeofMass","CGA eigmvs"]
+    alg_names = ["VGA-EVD","CGA-EVD"]
 
     # Chose multiple files
     filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle",
@@ -500,20 +511,24 @@ def plot_benchmarks(dct,show_plot=False):
     plot_experiments_3(bench_pos,x_axis,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,pos_file_name,legend=legend)
 
 if __name__ == "__main__":
-    alg_names = ["CGA eigmvs","VGA CeofMass"]
+    # alg_names = ["CGA-EVD","VGA-EVD"]
     
-    ''' Load a pickle file and plot the data'''
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_sigma_0_01_trajectory_ArmadilloBack_0_05_03_2024_09_30_05.pickle"
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
-    dct = filter_dictionary(dct,alg_names)
-    plot_benchmarks(dct)
+    # ''' Load a pickle file and plot the data'''
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_18_04_2024_15_40_31.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_18_04_2024_17_09_10.pickle"
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
+    # # dct = filter_dictionary(dct,alg_names)
+    # plot_benchmarks(dct)
     
-    ''' Load a pickle file and plot an histogram '''
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
-    dct = filter_dictionary_single_exp(dct,alg_names)
-    plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
+    plot_multiple_benchmarks()
+
+    # ''' Load a pickle file and plot an histogram '''
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
+    # dct = filter_dictionary_single_exp(dct,alg_names)
+    # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
 
     plt.show()

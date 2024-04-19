@@ -218,8 +218,8 @@ class PointCloudSettings:
         self.translation_vector = np.zeros(3)
         self.color = [0,0,0,1]
         self.id = id
-        self.Rotor = vga3d.multivector([1],basis=['e'])
-        self.Motor = vga3d.multivector([1],basis=['e'])
+        self.Rotor = vga3d.mvarray([1],basis=['e'])
+        self.Motor = vga3d.mvarray([1],basis=['e'])
         self._draw_geometries = [False,False,True]
         self.arrow_scale = 1
         self.geometries = []
@@ -233,7 +233,7 @@ class PointCloudSettings:
         ''' Computes a motor from the axis angle and translation vector''' 
         t_vec = self.translation_magnitude*self.translation_axis
         Rotor = axis_angle_to_rotor(self.rotation_axis,self.rotation_angle)
-        t = vga3d.multivector(t_vec.tolist(),grades=1)
+        t = vga3d.mvarray(t_vec.tolist(),grades=1)
         Translator = 1 + (1/2)*einf*t
         return Translator*Rotor
 
@@ -267,6 +267,18 @@ class PointCloudSettings:
         pts += noise
         self.noisy_pcd.points = o3d.utility.Vector3dVector(pts)
 
+    def update_sampling_noise(self,sigma,ratio):
+        every_k_points = int(1/ratio)
+        pcd = self.pcd.uniform_down_sample(every_k_points)
+        
+        # pcd = self.pcd.random_down_sample(ratio)
+        pts = np.asarray(pcd.points)
+
+        noise = np.random.normal(0,sigma,size=pts.shape)
+        pts += noise
+        self.noisy_pcd.points = o3d.utility.Vector3dVector(pts)
+
+
     def update_axis_angle(self,trans_axis,trans_mag,rot_angle,rot_axis):
         self.rotation_angle = rot_angle
         self.rotation_axis = rot_axis
@@ -284,11 +296,11 @@ class PointCloudSettings:
         Motor_new = self.compute_motor()
         t_new,R_new = motor_to_rotation_translation(Motor_new)
 
-        # t_old = vga3d.multivector(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
+        # t_old = vga3d.mvarray(self.translation_vector.tolist(),grades=1) # Convert to geometric algebra
         # Motor_old = (1+(1/2)*einf*t_old)*self.Rotor
 
         Motor_old = self.Motor
-        # t_new = vga3d.multivector(t.tolist(),grades=1) # Convert to geometric algebra
+        # t_new = vga3d.mvarray(t.tolist(),grades=1) # Convert to geometric algebra
         # Motor_new = (1+(1/2)*einf*t_new)*Rotor
         
         Motor = Motor_new*~Motor_old
@@ -433,11 +445,16 @@ class PointCloudSettings:
     
     def update_axis_angle_from_motor(self):
         t,a,theta = motor_to_axis_angle(self.Motor)
-        t_normalized = pyga.normalize_mv(t)
+        if(pyga.numpy_max(t) == 0):
+            t_normalized = e1
+            t = e1
+            self.translation_magnitude = 0
+        else:
+            t_normalized = pyga.normalize(t)
+            self.translation_magnitude = (t_normalized|t)(0)
 
         self.translation_vector = np.array(t.tolist(1)[0][:3])
         self.translation_axis = np.array(t_normalized.tolist(1)[0][:3])
-        self.translation_magnitude = (t_normalized|t)(0)
         self.rotation_axis = np.array(a.tolist(1)[0][:3])
         self.rotation_angle = theta*2
 
@@ -565,6 +582,30 @@ class PointCloudSettings:
         torus_mesh1.compute_vertex_normals()
     
         return circle_mesh,torus_mesh,torus_mesh1
+
+class MetricGuiInfo:
+    def __init__(self,name,rre,rte,grid):
+        self.gui_label_name = gui.Label(name)
+        self.gui_str_ang_error = gui.Label("Rotation error (RRE):")
+        self.gui_spacers = gui.Label("                   ")
+        self.gui_str_trans_mag_error = gui.Label("Translation error (RTE):")
+        
+        self.gui_rot_angle_error = gui.Label('%.5E' % rre)
+        self.gui_trans_mag_error = gui.Label('%.5E' % rte)
+
+        self.gui_label_name.text_color = gui.Color(0,0,0,1)
+
+        grid.add_child(self.gui_label_name)
+        grid.add_child(self.gui_spacers)
+        grid.add_child(self.gui_str_ang_error)
+        grid.add_child(self.gui_rot_angle_error)
+        grid.add_child(self.gui_str_trans_mag_error)
+        grid.add_child(self.gui_trans_mag_error)
+
+    def update(self,rre,rte):
+        self.gui_rot_angle_error.text = '%.5E' % rre
+        self.gui_trans_mag_error.text = '%.5E' % rte
+
 
 class AppWindow:
     MENU_OPEN = 1
@@ -803,6 +844,12 @@ class AppWindow:
         self._gaussian_noise.set_on_value_changed(self._on_gaussian_noise)
         self._gaussian_noise.double_value = self.sigma
         
+        self._sampling_ratio = gui.Slider(gui.Slider.DOUBLE)
+        self._sampling_ratio.set_limits(0.0,1)
+        self._sampling_ratio.background_color = gui.Color(0.5, 0.5, 0.5, 0.5)
+        self._sampling_ratio.set_on_value_changed(self._on_sampling_ratio)
+        self._sampling_ratio.double_value = self.sampling_ratio
+
         self._point_cloud = gui.Combobox()
         self._point_cloud.set_on_selection_changed(self._on_point_cloud)
 
@@ -829,6 +876,7 @@ class AppWindow:
             self._choose_algorithm.add_item(self.alg_names[i])
         self._choose_algorithm.set_on_selection_changed(self._on_choose_algorithm)
         self.algorithm = self.alg_list[0]
+        self.list_gui_metric_info = [0]*len(self.alg_list)
 
         self._draw_spheres = gui.Button("Spheres")
         self._draw_circles = gui.Button("Circles")
@@ -861,12 +909,15 @@ class AppWindow:
         grid.add_child(self._trans_mag)
         grid.add_child(gui.Label("Gaussian Noise"))
         grid.add_child(self._gaussian_noise)
+        grid.add_child(gui.Label("Sampling Ratio"))
+        grid.add_child(self._sampling_ratio)
         grid.add_child(self._update_primitives)
         grid.add_child(self._est_transformation)
         grid.add_child(self._show_point_cloud)
         grid.add_child(gui.Label("   ")) # ghost widget
         grid.add_child(gui.Label("Algorithms"))
         grid.add_child(self._choose_algorithm)
+        self.alg_index = 0
         rts_settings.add_child(grid)
 
         grid = gui.VGrid(3,0.25*em)
@@ -894,11 +945,24 @@ class AppWindow:
         grid.add_child(self._trans_mag_error)
         rts_settings.add_child(grid)
 
+        reg_metrics = gui.CollapsableVert("Registration Results", 0,
+                                                gui.Margins(em, 0, 0, 0))
+
+        self.metrics_grid = gui.VGrid(2,0.25*em)
+        reg_metrics.add_child(self.metrics_grid)
+
         self._settings_panel.add_fixed(separation_height)
         self._settings_panel.add_child(material_settings)
         self._settings_panel.add_child(rts_settings)
+        self._settings_panel.add_child(reg_metrics)
 
         self.rts_settings = rts_settings
+
+        
+
+
+
+        # self._metrics_list = gui.ListView()
 
         # ----
 
@@ -979,6 +1043,8 @@ class AppWindow:
         self._draw_primitives = [True,False,True] # Default values (spheres,circles,arrows)
         self.target_idx = 1
         self.source_idx = 0
+        self.max_nbr_points = 50e3
+        self.sampling_ratio = 1
 
     def _apply_settings(self):
         bg_color = [
@@ -1249,10 +1315,17 @@ class AppWindow:
         self.point_clouds[self.pcd_index].update_point_cloud()
         self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
+
+    def _on_sampling_ratio(self,value):
+        self.sampling_ratio = value
+        for i in range(len(self.point_clouds)):
+            self.point_clouds[i].update_sampling_noise(self.sigma,self.sampling_ratio)
+            self.point_clouds[i].update_noisy_pcd(self._scene.scene,self.settings.material)
+
     def _on_gaussian_noise(self,value):
         self.sigma = value
         for i in range(len(self.point_clouds)):
-            self.point_clouds[i].update_gaussian_noise(self.sigma)
+            self.point_clouds[i].update_sampling_noise(self.sigma,self.sampling_ratio)
             self.point_clouds[i].update_noisy_pcd(self._scene.scene,self.settings.material)
 
     def _on_update_primitives(self):
@@ -1330,17 +1403,18 @@ class AppWindow:
             self.point_clouds[self.source_idx].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
 
     def print_metrics(self,M,M_est):
-        ang_error,t_mag_error,_,_ = get_motor_metrics(M,M_est)
+        rre,rte,_,_ = get_motor_metrics(M,M_est)
         
-        # f"{ang_error:.9f}"
-        self._rot_angle_error.text = '%.5E' % ang_error
-        self._trans_mag_error.text = '%.5E' % t_mag_error
-        self._str_ang_error.visible = True
-        self._str_trans_mag_error.visible = True
+        if(self.list_gui_metric_info[self.alg_index] == 0):
+            self.list_gui_metric_info[self.alg_index] = MetricGuiInfo(self.alg_names[self.alg_index],rre,rte,self.metrics_grid)
+        else:
+            self.list_gui_metric_info[self.alg_index].update(rre,rte)
+
         self.window.set_needs_layout()
 
     def _on_choose_algorithm(self,name,index):
         self.algorithm = self.alg_list[index] 
+        self.alg_index = index
 
     def _on_point_cloud_color(self,color):
         self.point_clouds[self.pcd_index].color = [ 
@@ -1368,6 +1442,14 @@ class AppWindow:
         
         # Put the center of mass of the dataset at the origin
         pts = np.asarray(pcd.points)
+        print("Number of points:",pts.shape[0])
+
+        # Downsample the points if number of points is greater then 50000
+        # if(len(pts) > self.max_nbr_points):
+        #     pcd = pcd.random_down_sample(self.max_nbr_points/len(pts))
+        #     pts = np.asarray(pcd.points)
+
+
         ceofm = pts.mean(axis=0)
         pcd.points = o3d.utility.Vector3dVector(pts - ceofm) 
 

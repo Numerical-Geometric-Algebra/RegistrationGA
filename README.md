@@ -3,14 +3,17 @@
 
  - Install the needed packages for python
 ```shell
-    pip install matplotlib
-    pip install scipy
-    pip install open3d
-    pip install PyQt5
-    pip install git+ssh://git@github.com/FranciscoVasconcelos/sparse-multivectors.git@v0.0.1a
+    pip install matplotlib scipy open3d PyQt5
+    pip install git+ssh://git@github.com/FranciscoVasconcelos/sparse-multivectors.git@v0.0.2a
 ```
 
-**NOTE**: Since the repository sparse-multivectors is private to install the gasparse module the user needs to first get the ssh github permissions by [adding an ssh key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
+If having trouble with the last command then clone the repository and install it using pip
+```shell
+git clone --depth 1 --branch v0.0.2a git@github.com:FranciscoVasconcelos/sparse-multivectors.git
+pip install sparse-multivectors
+```
+
+**NOTE**: Since the repository sparse-multivectors is private, to install the gasparse module the user needs to first get the ssh github permissions by [adding an ssh key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
 
 The Stanford Dataset is available [here](https://mega.nz/folder/4VQBwB7Z#Rv5kA9EbcHPWj3-BvYJRFw). 
 
@@ -29,3 +32,6 @@ In the script `algorithms_pcviz.py` are the algorithms used for the visualizer, 
 Script `algorithms.py` lists the algorithms for benchmarking. It is used by `benchmark.py` to benchmark those algorithms.
 
 
+## NOTES
+
+- Can also use $(e_\infty\cdot P_i)^2$ to help identifying the sign/scalar of an eigenmultivector.

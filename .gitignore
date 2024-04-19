@@ -2,3 +2,6 @@ __pycache__/geo_algebra.cpython-311.pyc
 __pycache__/eig_estimation.cpython-311.pyc
 Plots/*.pdf
 Benchmarks
+dcp/
+Point-Feature-Histogram/
+pfh_repo/

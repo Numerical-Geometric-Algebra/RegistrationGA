@@ -2,7 +2,7 @@
 import gasparse
 import geo_algebra as pyga
 import multilinear_algebra as multiga
-from gasparse import multivector as mv
+from gasparse import mvarray as mv
 import numpy as np
 import math
 
@@ -90,12 +90,12 @@ def rdn_3dcga_multivector():
 def rdn_3dvga_rotor():
     a = rdn_3dvga_vector()
     b = rdn_3dvga_vector()
-    return pyga.normalize_mv(a*b)
+    return pyga.normalize(a*b)
 
 def gen_rdn_3dcga_rotor():
     a = rdn_3dcga_vector()
     b = rdn_3dcga_vector()
-    return pyga.normalize_mv(a*b)
+    return pyga.normalize(a*b)
 
 def rdn_3dcga_translator(scale=10):
     t = scale*rdn_3dvga_vector()
@@ -103,7 +103,7 @@ def rdn_3dcga_translator(scale=10):
 
 def gen_pseudordn_3dvga_rotor(angle):
     theta = angle*np.pi/180
-    u = pyga.normalize_mv(rdn_3dvga_vector())
+    u = pyga.normalize(rdn_3dvga_vector())
     R = np.cos(theta/2) + I*u*np.sin(theta/2)
     return R
 
@@ -112,7 +112,7 @@ def gen_pseudordn_rigtr(angle,mag):
         generate a random rotation with a given angle
         and a translation with a given magnitude'''
     R = gen_pseudordn_3dvga_rotor(angle)
-    t = mag*pyga.normalize_mv(rdn_3dvga_vector())
+    t = mag*pyga.normalize(rdn_3dvga_vector())
     T = 1 + (1/2)*einf*t
     return (T,R)
 
@@ -174,7 +174,7 @@ def decompose_motor(U):
         Also serves to pseudo project to the space of motors U = T*R
     '''
     # Pseudo project to the space of motors
-    R_est = pyga.normalize_mv(Proj_I(U))
+    R_est = pyga.normalize(Proj_I(U))
     t_est = -2*Proj_I(((eo|U)*~R_est)(1))
     T_est = 1 + (1/2)*einf*t_est
     return T_est,R_est
@@ -305,14 +305,14 @@ def estimate_rot_3dvga(X,Y):
 
 
 def exact_rotation(a1,a2,b1,b2):
-    n = pyga.normalize_mv(I*((a1-b1)^(a2-b2)))
+    n = pyga.normalize(I*((a1-b1)^(a2-b2)))
     Pperp_a1 = (a1|n)*n
     P_a1 = (a1^n)*n
     R_sq = (b1 - Pperp_a1)*pyga.inv(P_a1)
     return pyga.rotor_sqrt(R_sq)
 
 def axis_angle_to_rotor(axis,angle):
-    v = pyga.normalize_mv(vga3d.multivector(axis.tolist(),grades=1))
+    v = pyga.normalize(vga3d.mvarray(axis.tolist(),grades=1))
     Rotor = np.cos(angle/2) + I*v*np.sin(angle/2)
     return Rotor
 
@@ -320,13 +320,13 @@ def motor_to_axis_angle(Motor):
     eps = 1e-100
     T,R = decompose_motor(Motor)
     t = -2*(eo|T)
-    theta = np.arctan2(pyga.mag_mv(R(2)),R(0))
+    theta = np.arctan2(pyga.mag(R(2)),R(0))
     if abs(theta) < eps  or abs(theta - np.pi) < eps: # 0 rotation or 
         # Chose arbitrary axis of rotation 
         a = e1
     else:
-        a = ~I*R(2)/pyga.mag_mv(R(2))
-    a = pyga.normalize_mv(a)
+        a = ~I*R(2)/pyga.mag(R(2))
+    a = pyga.normalize(a)
     return t,a,theta
 
 def rotor3d_to_matrix(Rotor):
@@ -342,12 +342,13 @@ def rotmatrix_to_3drotor(rot_matrix):
     # The eigenvector with eigenvalue of smallest magnitude 
     u = np.real(eigenvectors[:,np.argmin(abs(eigenvalues))])
     v = rot_matrix@u
-    u = vga3d.multivector(list(u),grades=1) # Convert to VGA
-    v = vga3d.multivector(list(v),grades=1) # Convert to VGA
+    u = vga3d.mvarray(u.reshape(3).tolist(),grades=1) # Convert to VGA
+    v = vga3d.mvarray(v.reshape(3).tolist(),grades=1) # Convert to VGA
 
-    rotor = pyga.normalize_mv(v)*pyga.normalize_mv(u)
+    rotor = pyga.normalize(v)*pyga.normalize(u)
 
-    return pyga.rotor_sqrt(rotor)
+    # return pyga.rotor_sqrt(rotor)
+    return pyga.rotor_sqrt_secure(rotor)
 
 def motor_to_rotation_translation(Motor):
     ''' Takes a motor and computes the rotation matrix and translation vector'''
@@ -355,6 +356,13 @@ def motor_to_rotation_translation(Motor):
     t_vec = np.array((-2*(eo|T)).tolist(1)[0][:3])
     R_matrix = rotor3d_to_matrix(R)
     return t_vec,R_matrix
+
+def rotation_translation_to_translator_rotator(R_matrix,t_vec):
+    '''Takes a rotation and translation and computes a motor '''
+    R = rotmatrix_to_3drotor(R_matrix) # Converts a rotation matrix into a rotor
+    t = nparray_to_3dvga_vector_array(t_vec) # Converts a vector in numpy to a vector in VGA
+    T = 1 + (1/2)*einf*t # Computes the translator
+    return (T,R) # Returns the translator and the rotator
 
 def rotation_translation_to_motor(R_matrix,t_vec):
     '''Takes a rotation and translation and computes a motor '''
@@ -409,7 +417,7 @@ def get_3dcga_eigmvs(p,grades=[1,2]):
     # Use the point at infinity to define a sign for the multivectors
     # If the scalar product with the point at infinity is zero then the sign of that zero is used
     for i in range(len(P_lst)):
-        P_lst[i] = pyga.normalize_mv(P_lst[i])
+        P_lst[i] = pyga.normalize(P_lst[i])
         P_lst[i] = P_lst[i]*math.copysign(1,(P_lst[i]*einf)(0))
     
     return (P_lst,lambda_P)
@@ -508,7 +516,7 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
     '''Computes error metrics between the rotation and translation and the ground truth'''
     t = -eo|T*2
     t_est = -eo|T_est*2
-    R_est = pyga.normalize_mv(R_est)
+    R_est = pyga.normalize(R_est)
     costheta = (R_est*~R)(0)
     if abs(costheta) > 1:
         costheta = 1
@@ -517,10 +525,10 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
         ang_error = 360 - ang_error
 
     # Compute the magnitude of tranlation error
-    t_mag_error = pyga.mag_mv(t - t_est)
+    t_mag_error = pyga.mag(t - t_est)
 
     # Compute the error between the planes of rotation
-    cosphi = (pyga.normalize_mv(R(2))*~pyga.normalize_mv(R_est(2)))(0)
+    cosphi = (pyga.normalize(R(2))*~pyga.normalize(R_est(2)))(0)
     if abs(cosphi) > 1:
         cosphi = 1
     phi = np.arccos(cosphi)/np.pi*180
@@ -528,7 +536,7 @@ def get_rigtr_error_metrics(R,R_est,T,T_est):
         phi = 360 - phi
     
     # When the translation vector t is zero or t_est is zero then cos_trans will be nan
-    cos_trans = (pyga.normalize_mv(t)|pyga.normalize_mv(t_est))(0)
+    cos_trans = (pyga.normalize(t)|pyga.normalize(t_est))(0)
     if abs(cos_trans) > 1:
         cos_trans = 1
     t_angle_error = np.arccos(cos_trans)/np.pi*180

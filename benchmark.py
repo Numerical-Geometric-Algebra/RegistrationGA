@@ -30,13 +30,15 @@ def benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier):
 
     x = nparray_to_3dvga_vector_array(pts_with_outliers) + noise
     for j in range(nalgorithms):
-        T_est,R_est,_,_ = algorithms[j](x,y,npoints)
+        T_est,R_est = algorithms[j](x,y,npoints)
         ang_error[j],pos_error[j],plane_error[j],trans_angle_error[j] = get_rigtr_error_metrics(R,R_est,T,T_est)
     
     return ang_error,pos_error,plane_error,trans_angle_error
 
-def benchmark(pts,sigma,algorithms,U,niters,noutliers,maxoutlier):
-    ''' Generates random rotation and translation'''
+def benchmark(pts,exp,algorithms):
+    ''' Benchmark for multiple iterations '''
+
+    sigma,motor,niters,noutliers,maxoutlier,rand_transf = (exp['sigma'],exp['motor'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"],exp["rand_transf"])
 
     nalgorithms = len(algorithms)
     ang_error = np.zeros([niters,nalgorithms])
@@ -44,8 +46,15 @@ def benchmark(pts,sigma,algorithms,U,niters,noutliers,maxoutlier):
     plane_error = np.zeros([niters,nalgorithms])
     trans_angle_error = np.zeros([niters,nalgorithms])
     
-    T,R = decompose_motor(U)
     for i in range(niters):
+        if(rand_transf):
+            tscaling = exp["t_scaling"]
+            rotangle = (np.random.rand() - 0.5)*360
+            T,R = gen_pseudordn_rigtr(rotangle,tscaling)
+            print("Motor=",T*R)
+        else:
+            T,R = decompose_motor(motor)
+            
         ang_error[i],pos_error[i],plane_error[i],trans_angle_error[i] = benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier)
 
     return ang_error.T,pos_error.T,plane_error.T,trans_angle_error.T
@@ -71,7 +80,7 @@ def run_experiments(pts,experiments,algorithms):
     i = 0
     for exp in experiments:
         print("Experiment",i,"of",len(experiments),":",exp)
-        benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['motor'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
+        benchmark_values = benchmark(pts,exp,algorithms)
 
         # Saves the worst and the best without filtering results
         for j in range(len(benchmark_worst_array)):
@@ -104,16 +113,20 @@ def get_value(element,i):
     else:
         return element[i]
 
-def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,trajectory=False):
+def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,trajectory=False,random_transf=False):
     U = 1
     lst = [0]*n_exps
     for i in range(n_exps):
         dct = {}
+        dct['rand_transf'] = random_transf
+        dct['t_scaling'] = 0
+        U = 0
+
         # Generate the random rigid transformations
         if trajectory:
             R,T = gen_pseudordn_rigtr(rotangle,tscaling)
             U *= T*R
-        else:
+        elif not random_transf:
             if rotangle is not None:
                 rotanglei = get_value(rotangle,i)
             else:
@@ -123,7 +136,9 @@ def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,t
 
             R,T = gen_pseudordn_rigtr(rotanglei,tscalingi)
             U = T*R
-
+        else:
+            dct['t_scaling'] = tscaling
+        
         dct['motor'] = U
         dct['sigma'] = get_value(sigma,i)
         dct['n_iters'] = get_value(niters,i)
@@ -198,9 +213,13 @@ def get_name_filepath(filepath):
 if __name__ == '__main__':
 
     show_plot = True # Set to true to show the plots imediatly 
-    save_data = False # Set to true to save a .pickle file with the data, saves in the Benchmark folder
+    save_data = True # Set to true to save a .pickle file with the data, saves in the Benchmark folder
     save_plot = False # Set to true to save the plot (needs show_plot = True), saves in the Plots folder
     
+    ratio = 1
+    every_k_points = int(1/ratio)
+
+
     # uncomment/comment if prefer dark background
     plt_bench.set_dark_background()
 
@@ -210,13 +229,20 @@ if __name__ == '__main__':
     filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply" 
 
     pcd = o3d.io.read_point_cloud(filename)
+    pcd = pcd.uniform_down_sample(every_k_points)
     pts = np.asarray(pcd.points)
+
 
     algorithms = []
     algorithms += [estimate_transformation_VGA] # Baseline, works well most of the time
-    algorithms += [estimate_transformation_CGA] # Propose algorithm
+    algorithms += [estimate_transformation_CGA] # Proposed algorithm
     algorithms += [estimate_transformation_ICP] # Iterative Closest points
     algorithms += [estimate_transformation_pasta] # PASTA
+    algorithms += [estimate_transformation_dcp] # Deep closest points
+    algorithms += [estimate_transformation_GOICP] # Global ICP
+    algorithms += [estimate_transformation_TEASER] # Truncated least squares Estimation And SEmidefinite Relaxation 
+
+
     
 
     ''' Defining a random trajectory'''
@@ -241,24 +267,32 @@ if __name__ == '__main__':
     # fig_name_end = "dummy"
     # xlabel_str = "Iterations"
     # trajectory = False
-
     '''Increasing the NOISE of the point clouds'''
     trajectory = False # The rotation and translations are not cummulative
+    random_transformation = True
     niters = 10 # Number of iterations for each experiment
+    
+    # Big transformation
     tscaling = 1 # The magnitude of the translation
     rotangle = None # Set to none for random rotation angle
-    sigmas = np.arange(0.000,0.0300001,0.001) # The different levels of noise to test against
+    
+    # Small transformation
+    # tscaling = 0.01 # small translation magnitude
+    # rotangle = 5 # Small rotation angle
+
+    sigmas = np.arange(0.000,0.0200001,0.004) # The different levels of noise to test against
     n_exps = len(sigmas) # Number of experiments
 
     x_axis = sigmas
     xlabel_str = r'Noise ($\sigma$)'
     fig_name_end = "magpos_" + str(tscaling).replace('.','_') + "_varsigma_"
 
-    experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory)
+    experiments = get_experiments(n_exps,niters,sigmas,tscaling,rotangle,noutliers=0,maxoutlier=0,trajectory=trajectory,random_transf=random_transformation)
     benchmark_values = run_experiments(pts,experiments,algorithms)
     
     if save_data:
         filename_bench = save_multiple_experiments(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
+        print(filename_bench)
     if show_plot:
         dct,_ = multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename)
         plot_benchmarks(dct,save_plot)

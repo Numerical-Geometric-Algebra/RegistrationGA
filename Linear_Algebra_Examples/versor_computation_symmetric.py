@@ -41,7 +41,7 @@ for i in range(n_samples):
     V = 1
     for i in range(n_reflections):
         V *= pyga.rdn_multivector_array(ga,grades=1,size=1)
-    V = pyga.normalize_mv(V)
+    V = pyga.normalize(V)
 
     # Define the differential the adjoint and the symmetric part of H 
     H_diff = lambda X: (-1)**n_reflections*V*X*pyga.inv(V)

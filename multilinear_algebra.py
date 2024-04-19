@@ -1,6 +1,6 @@
 import numpy as np
 import geo_algebra as pyga
-from gasparse import multivector as mv
+from gasparse import mvarray as mv
 
 
 def get_matrix(F,basis,rec_basis):
@@ -162,7 +162,7 @@ def compute_versor_symmetric(H_diff,H_adj,basis,rec_basis):
 
     sign = 1
     ga = basis[0].GA()
-    U = ga.multivector([1.0],basis=['e'])
+    U = ga.mvarray([1.0],basis=['e'])
     i = 0
 
     # Find reflections
@@ -186,7 +186,7 @@ def compute_versor_symmetric(H_diff,H_adj,basis,rec_basis):
         U *= pyga.rotor_sqrt(H_diff(a[i])*pyga.inv(a[i]))
         i += 2
 
-    U = pyga.normalize_mv(U)
+    U = pyga.normalize(U)
     return U,sign*(U*~U)(0)
 
 
@@ -206,7 +206,7 @@ def compute_versor_skew(F,basis,rec_basis):
 
     # If it is symmetric, return the identity.
     if pyga.numpy_max(B) < 0.00001:
-        return ga.multivector([1],basis=['e']) # It must be a multivector
+        return ga.mvarray([1],basis=['e']) # It must be a multivector
 
     pss = list(ga.basis(grades=len(ga.metric())).values())[0]
     # Get the blades and the eigenvectors of x|B
@@ -217,7 +217,7 @@ def compute_versor_skew(F,basis,rec_basis):
 
     V = 1
     i = 0
-    A = ga.multivector([1],basis=['e'])
+    A = ga.mvarray([1],basis=['e'])
 
     while i < len(a):
         if abs(lambda_G[i]) > 1e-10: # Found a vector in F_minus
