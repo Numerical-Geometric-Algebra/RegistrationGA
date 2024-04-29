@@ -6,6 +6,9 @@ import plot_benchmarks as plt_bench
 from datetime import datetime
 from algorithms import *
 import os
+import time
+
+
 
 def benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier):
     ''' Benchmarks a single iteration for each algorithm '''
@@ -15,6 +18,7 @@ def benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier):
     pos_error = np.zeros([nalgorithms])
     plane_error = np.zeros([nalgorithms])
     trans_angle_error = np.zeros([nalgorithms])
+    inference_time = np.zeros([nalgorithms])
 
     # Add random outliers
     outliers = maxoutlier*np.random.rand(noutliers,3)
@@ -27,13 +31,20 @@ def benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier):
     y = R*x*~R + t + noise
 
     noise = rdn_gaussian_3dvga_vecarray(0,sigma,npoints)
-
     x = nparray_to_3dvga_vector_array(pts_with_outliers) + noise
+
     for j in range(nalgorithms):
+        print('\nBenchmarking algorithm:',get_algorithm_name(algorithms[j]),'\n')
+        time_start = time.time()
         T_est,R_est = algorithms[j](x,y,npoints)
+        time_end = time.time()
+        inference_time[j] = time_end - time_start
+        print(inference_time[j])
+        # print('T_est=',T_est)
+        # print('R_est=',R_est)
         ang_error[j],pos_error[j],plane_error[j],trans_angle_error[j] = get_rigtr_error_metrics(R,R_est,T,T_est)
     
-    return ang_error,pos_error,plane_error,trans_angle_error
+    return ang_error,pos_error,plane_error,inference_time,trans_angle_error
 
 def benchmark(pts,exp,algorithms):
     ''' Benchmark for multiple iterations '''
@@ -45,19 +56,23 @@ def benchmark(pts,exp,algorithms):
     pos_error = np.zeros([niters,nalgorithms])
     plane_error = np.zeros([niters,nalgorithms])
     trans_angle_error = np.zeros([niters,nalgorithms])
+    inference_time = np.zeros([niters,nalgorithms])
     
     for i in range(niters):
         if(rand_transf):
             tscaling = exp["t_scaling"]
-            rotangle = (np.random.rand() - 0.5)*360
+            if 'rotangle' in exp:
+                rotangle = exp['rotangle']
+            else:
+                rotangle = (np.random.rand() - 0.5)*360
             T,R = gen_pseudordn_rigtr(rotangle,tscaling)
             print("Motor=",T*R)
         else:
             T,R = decompose_motor(motor)
             
-        ang_error[i],pos_error[i],plane_error[i],trans_angle_error[i] = benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier)
+        ang_error[i],pos_error[i],plane_error[i],inference_time[i],trans_angle_error[i] = benchmark_iter(pts,sigma,algorithms,T,R,noutliers,maxoutlier)
 
-    return ang_error.T,pos_error.T,plane_error.T,trans_angle_error.T
+    return ang_error.T,pos_error.T,plane_error.T,inference_time.T,trans_angle_error.T
 
 
 def filter_experiments(benchmark_values):
@@ -72,10 +87,10 @@ def filter_experiments(benchmark_values):
 
 def run_experiments(pts,experiments,algorithms):
 
-    benchmark_worst_array = np.zeros([3,len(experiments),len(algorithms)])
-    benchmark_best_array = np.zeros([3,len(experiments),len(algorithms)])
-    benchmark_mean_array = np.zeros([3,len(experiments),len(algorithms)])
-    benchmark_std_array = np.zeros([3,len(experiments),len(algorithms)])
+    benchmark_worst_array = np.zeros([4,len(experiments),len(algorithms)])
+    benchmark_best_array = np.zeros([4,len(experiments),len(algorithms)])
+    benchmark_mean_array = np.zeros([4,len(experiments),len(algorithms)])
+    benchmark_std_array = np.zeros([4,len(experiments),len(algorithms)])
 
     i = 0
     for exp in experiments:
@@ -98,8 +113,9 @@ def run_experiments(pts,experiments,algorithms):
     bench_rot = [benchmark_worst_array[0],benchmark_best_array[0],benchmark_mean_array[0],benchmark_std_array[0]]
     bench_pos = [benchmark_worst_array[1],benchmark_best_array[1],benchmark_mean_array[1],benchmark_std_array[1]]
     bench_posangle = [benchmark_worst_array[2],benchmark_best_array[2],benchmark_mean_array[2],benchmark_std_array[2]]
+    bench_times = [benchmark_worst_array[3],benchmark_best_array[3],benchmark_mean_array[3],benchmark_std_array[3]]
     
-    return (bench_rot,bench_pos,bench_posangle)
+    return (bench_rot,bench_pos,bench_posangle,bench_times)
 
 def run_single_experiment(pts,exp,algorithms):
     benchmark_values = benchmark(pts,exp['sigma'],algorithms,exp['motor'],exp['n_iters'],exp['n_outliers'],exp["max_dist_outlier"])
@@ -138,6 +154,8 @@ def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,t
             U = T*R
         else:
             dct['t_scaling'] = tscaling
+            if rotangle is not None:
+                dct['rotangle'] = get_value(rotangle,i)
         
         dct['motor'] = U
         dct['sigma'] = get_value(sigma,i)
@@ -150,7 +168,7 @@ def get_experiments(n_exps,niters,sigma,tscaling,rotangle,noutliers,maxoutlier,t
 
 
 def multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fig_name_end,filename):
-    bench_rot,bench_pos,bench_posangle = benchmark_values
+    bench_rot,bench_pos,bench_posangle,bench_time = benchmark_values
     now = datetime.now()
     dt_string = now.strftime('_%d_%m_%Y_%H_%M_%S')
     fig_name_end += get_name_filepath(filename)
@@ -160,6 +178,7 @@ def multiple_experiments_to_dct(benchmark_values,algorithms,x_axis,xlabel_str,fi
     dct["bench_rot"] = bench_rot
     dct["bench_posangle"] = bench_posangle
     dct["bench_pos"] = bench_pos
+    dct["bench_time"] = bench_time
     dct["x_axis"] = x_axis
     dct["algorithms"] = algorithms
     dct["fig_name_end"] = fig_name_end
@@ -225,8 +244,10 @@ if __name__ == '__main__':
 
     # Chose the point cloud that is being benchmarked
     # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply" 
+    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
+    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply" 
+    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res3.ply" 
+    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply" 
 
     pcd = o3d.io.read_point_cloud(filename)
     pcd = pcd.uniform_down_sample(every_k_points)
@@ -277,10 +298,10 @@ if __name__ == '__main__':
     rotangle = None # Set to none for random rotation angle
     
     # Small transformation
-    # tscaling = 0.01 # small translation magnitude
-    # rotangle = 5 # Small rotation angle
+    tscaling = 0.01 # small translation magnitude
+    rotangle = 5 # Small rotation angle
 
-    sigmas = np.arange(0.000,0.0200001,0.004) # The different levels of noise to test against
+    sigmas = np.arange(0.001,0.0100001,0.001) # The different levels of noise to test against
     n_exps = len(sigmas) # Number of experiments
 
     x_axis = sigmas

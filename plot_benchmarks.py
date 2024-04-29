@@ -122,7 +122,7 @@ def plot_experiments(bench,x_axis,title,xlabel_str,algorithms,marker_style,fig_n
     legend_savefig(fig_name,plt)
 
 def plot_experiments_3(bench,x_axis,title,xlabel_str,algorithms,marker_style,capsize=10.0,fig_name=None,legend=True):
-    ''' Plots experiments (worst and best in the different plots)'''
+    ''' Plots the experiments (mean and std)'''
     color = cm.rainbow(np.linspace(0, 1, len(algorithms)))
     n = len(algorithms)
 
@@ -483,6 +483,7 @@ def plot_benchmarks(dct,show_plot=False):
     bench_rot = dct["bench_rot"]
     bench_posangle = dct["bench_posangle"]
     bench_pos = dct["bench_pos"]
+    bench_time = dct["bench_time"]
     x_axis = dct["x_axis"]
     algorithms = dct["algorithms"]
     fig_name_end = dct["fig_name_end"]
@@ -491,6 +492,8 @@ def plot_benchmarks(dct,show_plot=False):
 
     angle_error_str = r"RRE ($\degree$)"
     pos_error_str = r"RTE (m)"
+    time_str = r"Time (s)"
+
     if show_plot:
         rot_file_name = None
         pos_file_name = None
@@ -509,20 +512,21 @@ def plot_benchmarks(dct,show_plot=False):
     capsize = 3.0
     plot_experiments_3(bench_rot,x_axis,angle_error_str,xlabel_str,algorithms,filled_marker_style,capsize,rot_file_name,legend=legend)
     plot_experiments_3(bench_pos,x_axis,pos_error_str,xlabel_str,algorithms,filled_marker_style,capsize,pos_file_name,legend=legend)
+    plot_experiments_3(bench_time,x_axis,time_str,xlabel_str,algorithms,filled_marker_style,capsize,pos_file_name,legend=legend)
 
 if __name__ == "__main__":
     # alg_names = ["CGA-EVD","VGA-EVD"]
     
     # ''' Load a pickle file and plot the data'''
     # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_18_04_2024_15_40_31.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_18_04_2024_17_09_10.pickle"
-    # with open(filename, "rb") as f:
-    #     dct = pickle.load(f)
-    # # dct = filter_dictionary(dct,alg_names)
-    # plot_benchmarks(dct)
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle"
+    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_24_04_2024_00_08_08.pickle"
+    with open(filename, "rb") as f:
+        dct = pickle.load(f)
+    # dct = filter_dictionary(dct,alg_names)
+    plot_benchmarks(dct)
     
-    plot_multiple_benchmarks()
+    # plot_multiple_benchmarks()
 
     # ''' Load a pickle file and plot an histogram '''
     # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"

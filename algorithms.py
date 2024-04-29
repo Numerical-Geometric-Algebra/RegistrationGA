@@ -172,7 +172,16 @@ def estimate_transformation_VGA(x,y,npoints):
         P_lst[i] = P_lst[i]*correct_sign_2(P_lst[i],x-x_bar)
         Q_lst[i] = Q_lst[i]*correct_sign_2(Q_lst[i],y-y_bar)
 
-    R_est = ~exact_rotation(Q_lst[0],Q_lst[1],P_lst[0],P_lst[1])
+    # If the eigenvectors are equal or almost equal
+    max_val0 = max(pyga.numpy_max(Q_lst[0]),pyga.numpy_max(P_lst[0]))
+    max_val1 = max(pyga.numpy_max(Q_lst[1]),pyga.numpy_max(P_lst[1]))
+    diff0 = pyga.numpy_max(Q_lst[0]- P_lst[0])
+    diff1 = pyga.numpy_max(Q_lst[1]- P_lst[1])
+
+    if diff0 < max_val0*1e-20 or diff1 < max_val1*1e-20:
+        R_est = vga3d.mvarray([1],basis=[1]) 
+    else:
+        R_est = ~exact_rotation(Q_lst[0],Q_lst[1],P_lst[0],P_lst[1])
     T_est = translation_from_cofm(y,x,R_est,npoints)
 
     return (T_est,R_est)
@@ -208,8 +217,22 @@ def __estimate_transformation_dcp__(x_nparray,y_nparray):
 def estimate_transformation_dcp(x,y,npoints):
     '''DCP'''
 
+    every_k_points = 10
+
     x_nparray = cga3d_vector_array_to_nparray(x)
     y_nparray = cga3d_vector_array_to_nparray(y)
+
+    x_pcd = o3d.geometry.PointCloud()
+    x_pcd.points = o3d.utility.Vector3dVector(x_nparray)
+
+    y_pcd = o3d.geometry.PointCloud()
+    y_pcd.points = o3d.utility.Vector3dVector(y_nparray)
+
+    x_pcd = x_pcd.uniform_down_sample(every_k_points)
+    y_pcd = y_pcd.uniform_down_sample(every_k_points)
+
+    x_nparray = np.asarray(x_pcd.points)
+    y_nparray = np.asarray(y_pcd.points)
 
     return __estimate_transformation_dcp__(x_nparray,y_nparray)
 
@@ -299,7 +322,7 @@ def __estimate_transformation_TEASER__(x_pcd,y_pcd):
     x_array = teaser.pcd2xyz(x_pcd) # np array of size 3 by N
     y_array = teaser.pcd2xyz(y_pcd) # np array of size 3 by M
     
-    radius_feat = 0.01
+    radius_feat = 0.1
     x_feats = teaser.extract_fpfh(x_pcd,radius_feat)
     y_feats = teaser.extract_fpfh(y_pcd,radius_feat)
 
@@ -309,7 +332,7 @@ def __estimate_transformation_TEASER__(x_pcd,y_pcd):
     y_corr = y_array[:,corrs_y] # np array of size 3 by num_corrs
 
     # robust global registration using TEASER++
-    NOISE_BOUND = 0.05
+    NOISE_BOUND = 0.01
     teaser_solver = teaser.get_teaser_solver(NOISE_BOUND)
     teaser_solver.solve(x_corr,y_corr)
     solution = teaser_solver.getSolution()

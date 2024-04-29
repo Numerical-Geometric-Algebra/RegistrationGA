@@ -867,6 +867,9 @@ class AppWindow:
         self._show_point_cloud = gui.Checkbox("Show Point Cloud")
         self._show_point_cloud.set_on_checked(self._on_show_point_cloud)
 
+        self._rand_transformation = gui.Button("Random T.R.")
+        self._rand_transformation.set_on_clicked(self._on_rand_transformation)
+
         self._est_transformation = gui.Button("Est. Motor")
         self._est_transformation.set_on_clicked(self._on_est_transformation)
 
@@ -913,6 +916,8 @@ class AppWindow:
         grid.add_child(self._sampling_ratio)
         grid.add_child(self._update_primitives)
         grid.add_child(self._est_transformation)
+        grid.add_child(self._rand_transformation)
+        grid.add_child(gui.Label("     "))
         grid.add_child(self._show_point_cloud)
         grid.add_child(gui.Label("   ")) # ghost widget
         grid.add_child(gui.Label("Algorithms"))
@@ -1385,6 +1390,23 @@ class AppWindow:
             self.point_clouds[self.pcd_index].update_noisy_pcd(self._scene.scene,self.settings.material)
             self.point_clouds[self.pcd_index].draw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
     
+    def _on_rand_transformation(self):
+        t = np.random.rand(3) - 0.5
+        t = t/np.sqrt((t*t).sum()) # Normalize the vector
+        rot_axis = np.random.rand(3) - 0.5
+        rot_axis = rot_axis/np.sqrt((rot_axis*rot_axis).sum()) # Normalize the rotation axis
+        angle = np.random.rand()*2*np.pi
+
+        self.translation_axis = t
+        # self.translation_magnitude = 1
+        self.rotation_angle = angle
+        self.rotation_axis = rot_axis
+        self.point_clouds[self.pcd_index].update_axis_angle(self.translation_axis,self.translation_magnitude,self.rotation_angle,self.rotation_axis)
+        self.point_clouds[self.pcd_index].update_point_cloud()
+        self.point_clouds[self.pcd_index].redraw_geometries(self._scene.scene,self.settings.material,self.settings.transp_mat)
+        self.update_gui_variables(self.pcd_index)
+
+
     def _on_est_transformation(self):
         if len(self.point_clouds) >= 2:
             for i in [self.source_idx,self.target_idx]: # update the eigenmultivectors of the source and target point clouds
