@@ -139,8 +139,8 @@ class Settings:
 
     def __init__(self):
         self.mouse_model = gui.SceneWidget.Controls.ROTATE_CAMERA
-        self.bg_color = gui.Color(0.5, 0.5, 0.5) # Grey background to not kill the eyes!!!
-        # self.bg_color = gui.Color(1, 1, 1) # Default to white backgroud
+        # self.bg_color = gui.Color(0.5, 0.5, 0.5) # Grey background to not kill the eyes!!!
+        self.bg_color = gui.Color(1, 1, 1) # Default to white backgroud
         self.show_skybox = False
         self.show_axes = False
         self.use_ibl = True

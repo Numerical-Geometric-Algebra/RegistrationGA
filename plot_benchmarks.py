@@ -91,7 +91,9 @@ def legend_savefig(fig_name,ax,y_pos=1.3,legend_in=False,legend=True):
 
 def plot_experiments(bench,x_axis,title,xlabel_str,algorithms,marker_style,fig_name=None):
     ''' Plots experiments (worst and best in the different plots)'''
-    color = cm.rainbow(np.linspace(0, 1, len(algorithms)))
+    color = list((mc.TABLEAU_COLORS).values())
+
+    # color = cm.rainbow(np.linspace(0, 1, len(algorithms)))
     n = len(algorithms)
 
     bench_worst,bench_best,bench_mean,bench_std = bench
@@ -254,6 +256,18 @@ def plot_experiments_multi_hists(dcts,titles,nbins=30,rot_range=None,pos_range=N
     plt.show()
 
 
+
+def order_colors(colors):
+    names = sorted(colors, key=lambda c: tuple(mc.rgb_to_hsv(mc.to_rgb(c))))
+    color_list = []
+    for i in range(len(names)):
+        color_list += [colors[names[i]]]
+    return color_list
+
+
+color_names = ["xkcd:aqua","xkcd:azure","xkcd:blue","xkcd:coral","xkcd:green","xkcd:magenta","xkcd:goldenrod","xkcd:orangered"]
+colors = [mc.XKCD_COLORS[name] for name in color_names]
+
 def plot_experiments_multi_plots(dcts,titles):
     # plt.style.use('dark_background')
     ratio = [2275,810]
@@ -267,7 +281,10 @@ def plot_experiments_multi_plots(dcts,titles):
     alg_names = []
     for i in range(len(algorithms)):
         alg_names += [get_algorithm_name(algorithms[i])]
-    colors = cm.rainbow(np.linspace(0, 1, len(algorithms)))
+    # colors = cm.rainbow(np.linspace(0, 1, len(algorithms)))
+    # colors = order_colors(mc.XKCD_COLORS)
+    # colors = list((mc.TABLEAU_COLORS).values())
+    # colors = list((mc.XKCD_COLORS).values())
     # colors = [np.array([249, 99, 0])/255,np.array([0, 150, 249])/255]
     capsize = 3.0
 
@@ -434,9 +451,14 @@ def plot_multiple_benchmarks():
     alg_names = ["ICP","CGA-EVD","PASTA 3D"]
 
     # Chose multiple files    
-    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_18_04_2024_15_40_31.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_18_04_2024_17_09_10.pickle"]
+
+    # filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_29_04_2024_18_52_02.pickle",
+    #              f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_04_2024_19_47_08.pickle",
+    #              f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_30_04_2024_08_33_00.pickle"]
+
+    filenames = ["/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
+                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
+                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
 
     titles = ["Bunny","Armadillo","Dragon"]
     dcts = []
@@ -447,6 +469,68 @@ def plot_multiple_benchmarks():
         dcts += [dct]
 
     plot_experiments_multi_plots(dcts,titles)
+
+indices = [0,1,4,9]
+def generate_table(dct):
+    bench_rot = dct["bench_rot"][2].T
+    bench_pos = dct["bench_pos"][2].T
+    algorithms = dct["algorithms"]
+    sigma = dct["x_axis"]
+
+    # print(bench_rot)
+    # print header
+    string = "Algorithm"
+    for i in indices:
+        string += " & \multicolumn{2}{|c|}{" + f'$\sigma={sigma[i]}$' + "}"
+    string += '\\\ \hline\n'
+
+    
+    for i in indices:
+        string += " & RRE (\\textdegree) & RTE (m)"
+    string += '\\\ \hline\n'
+    
+    j = 0
+    for j in range(len(algorithms)):
+        string += "\\textbf{\\textit{" +  get_algorithm_name(algorithms[j]) + "}}"
+        for i in indices:
+            string += ' & \\num{%s}' % ('%.3e' % bench_rot[j][i])
+            string += ' & \\num{%s}' % ('%.3e' % bench_pos[j][i])
+        string += '\\\ \hline\n'
+
+    return string
+
+def generate_table_times(dcts,names):
+    algorithms = dcts[0]["algorithms"]
+
+    string = "Algorithm"
+    for i in range(len(names)):
+        string += f" & {names[i]}"
+    string += '\\\ \hline\n'
+
+    for j in range(len(algorithms)):
+        string += "\\textbf{\\textit{" +  get_algorithm_name(algorithms[j]) + "}}"
+        for i in range(len(names)):
+            time = dcts[i]["bench_time"][2].T[j].mean()
+            string += ' & \\num{%s} s' % ('%.3e' % time)
+        string += '\\\ \hline\n'
+
+    return string
+
+def generate_time_tables_from_files():
+    filenames = ["/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
+                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
+                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
+
+    names = ["Bunny","Armadillo","Dragon"]
+
+    dcts = []
+    for i in range(len(filenames)):
+        with open(filenames[i], "rb") as f:
+            dct = pickle.load(f)
+        # dct = filter_dictionary(dct,alg_names)
+        dcts += [dct]
+
+    return generate_table_times(dcts,names)
 
 
 def plot_multiple_histograms():
@@ -517,15 +601,26 @@ def plot_benchmarks(dct,show_plot=False):
 if __name__ == "__main__":
     # alg_names = ["CGA-EVD","VGA-EVD"]
     
-    # ''' Load a pickle file and plot the data'''
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_18_04_2024_15_40_31.pickle"
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_18_04_2024_16_17_12.pickle"
-    filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_24_04_2024_00_08_08.pickle"
-    with open(filename, "rb") as f:
-        dct = pickle.load(f)
-    # dct = filter_dictionary(dct,alg_names)
-    plot_benchmarks(dct)
+    ''' Load a pickle file and plot the data'''
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle" # 1st table
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle" # 2nd table
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle" # 3rd table
+
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_29_04_2024_18_52_02.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_04_2024_19_47_08.pickle"
+    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_30_04_2024_08_33_00.pickle"
     
+    
+    # with open(filename, "rb") as f:
+    #     dct = pickle.load(f)
+    # # dct = filter_dictionary(dct,alg_names)
+    # plot_benchmarks(dct)
+    
+    table = generate_time_tables_from_files()
+    print(table)
+    # table = generate_table(dct)
+    # print(table)
+    # plot_benchmarks(dct,True)
     # plot_multiple_benchmarks()
 
     # ''' Load a pickle file and plot an histogram '''
@@ -535,4 +630,4 @@ if __name__ == "__main__":
     # dct = filter_dictionary_single_exp(dct,alg_names)
     # plot_histogram(dct,nbins=30,rot_range=(0,0.6),pos_range=(0,0.002))
 
-    plt.show()
+    # plt.show()

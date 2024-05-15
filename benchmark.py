@@ -244,8 +244,8 @@ if __name__ == '__main__':
 
     # Chose the point cloud that is being benchmarked
     # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply" 
+    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
+    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
     # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res3.ply" 
     # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply" 
 
@@ -257,11 +257,11 @@ if __name__ == '__main__':
     algorithms = []
     algorithms += [estimate_transformation_VGA] # Baseline, works well most of the time
     algorithms += [estimate_transformation_CGA] # Proposed algorithm
-    algorithms += [estimate_transformation_ICP] # Iterative Closest points
-    algorithms += [estimate_transformation_pasta] # PASTA
-    algorithms += [estimate_transformation_dcp] # Deep closest points
-    algorithms += [estimate_transformation_GOICP] # Global ICP
-    algorithms += [estimate_transformation_TEASER] # Truncated least squares Estimation And SEmidefinite Relaxation 
+    # algorithms += [estimate_transformation_ICP] # Iterative Closest points
+    # algorithms += [estimate_transformation_pasta] # PASTA
+    # algorithms += [estimate_transformation_dcp] # Deep closest points
+    # algorithms += [estimate_transformation_GOICP] # Global ICP
+    # algorithms += [estimate_transformation_TEASER] # Truncated least squares Estimation And SEmidefinite Relaxation 
 
 
     
@@ -294,14 +294,14 @@ if __name__ == '__main__':
     niters = 10 # Number of iterations for each experiment
     
     # Big transformation
-    tscaling = 1 # The magnitude of the translation
-    rotangle = None # Set to none for random rotation angle
+    # tscaling = 1 # The magnitude of the translation
+    # rotangle = None # Set to none for random rotation angle
     
     # Small transformation
     tscaling = 0.01 # small translation magnitude
     rotangle = 5 # Small rotation angle
 
-    sigmas = np.arange(0.001,0.0100001,0.001) # The different levels of noise to test against
+    sigmas = np.arange(0.01,0.0200001,0.001) # The different levels of noise to test against
     n_exps = len(sigmas) # Number of experiments
 
     x_axis = sigmas

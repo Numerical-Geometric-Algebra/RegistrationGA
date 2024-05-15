@@ -332,7 +332,7 @@ def __estimate_transformation_TEASER__(x_pcd,y_pcd):
     y_corr = y_array[:,corrs_y] # np array of size 3 by num_corrs
 
     # robust global registration using TEASER++
-    NOISE_BOUND = 0.01
+    NOISE_BOUND = 0.002
     teaser_solver = teaser.get_teaser_solver(NOISE_BOUND)
     teaser_solver.solve(x_corr,y_corr)
     solution = teaser_solver.getSolution()

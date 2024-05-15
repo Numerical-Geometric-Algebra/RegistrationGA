@@ -43,6 +43,18 @@ def check_null_mv(x):
     else:
         return False
 
+def get_basis(ga,grades):
+    basis = list(ga.basis(grades=grades).values())
+    basis = gasparse.mvarray.concat(basis)
+    recbasis = inv(basis)
+    return basis,recbasis
+
+def random_blade(ga,grade):
+    A_list = np.random.rand(grade,ga.size(1)).tolist()
+    A = ga.mvarray(A_list,grades=1)
+    A = A.prod()(grade)
+    return A
+
 def get_pseudoscalar(ga):
     grade = len(ga.metric())
     basis = list(ga.basis(grades=grade).values())
