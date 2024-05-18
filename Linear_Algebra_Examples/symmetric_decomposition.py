@@ -12,7 +12,7 @@ from algorithms import *
 import multilinear_algebra as multiga
 
 np.set_printoptions(linewidth=np.inf)
-p,q = 6,0
+p,q = 4,2
 ga = gasparse.GA(p,q)
 print("Geometric Algebra Initialized!!")
 basis = ga.basis()
@@ -32,7 +32,7 @@ Null blades act as projections to zero. Only reciprocal vectors are affected by 
 Even for positive signature geometric algebras, sometimes, not all the eigenvectors are found. 
 '''
 
-n_samples = 20
+n_samples = 50
 n_mvs = 1
 
 # Get the basis vectors and their reciprocals

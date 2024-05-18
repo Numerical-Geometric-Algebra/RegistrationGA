@@ -13,7 +13,7 @@ import multilinear_algebra as multiga
 
 np.set_printoptions(linewidth=np.inf)
 
-ga = gasparse.GA(8)
+ga = gasparse.GA(6,2)
 print("Geometric Algebra Initialized!!")
 basis = ga.basis()
 locals().update(basis)
@@ -25,7 +25,7 @@ we can also use a similar approach to compute the decomposition of a skew transf
 It works for any geometric algebra with positive signature!!
 '''
 
-n_samples = 10
+n_samples = 20
 
 # Get the basis vectors and their reciprocals
 basis,rec_basis = pyga.get_ga_basis_vectors(ga)

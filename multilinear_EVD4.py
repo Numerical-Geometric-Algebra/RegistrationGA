@@ -10,7 +10,7 @@ from gasparse import mvarray as mv
 # einf = (1.0*e5 - 1.0*e4)*(1/np.sqrt(2))
 # eo = (1.0*e5 + 1.0*e4)*(1/np.sqrt(2))
 
-ga = gasparse.GA(6)
+ga = gasparse.GA(4)
 locals().update(ga.basis())
 
 
