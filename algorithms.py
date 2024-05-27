@@ -1,16 +1,11 @@
 from cga3d_estimation import *
-
-import pasta3d
 import open3d as o3d
 
-import sdrsac
-from dcp_model import *
-
-from py_goicp import GoICP, POINT3D, ROTNODE, TRANSNODE;
-
-import scipy.special as sp
-
-import teaser
+# Uncomment if also benchmarking the other algorithms
+# from dcp_model import *
+# import pasta3d
+# from py_goicp import GoICP, POINT3D, ROTNODE, TRANSNODE;
+# import teaser
 
 # import numpy as np
 
@@ -48,7 +43,7 @@ def compute_references(p,q):
     return P_ref,Q_ref
 
 
-def estimate_transformation_pasta(x,y,npoints):
+def estimate_transformation_PASTA(x,y,npoints):
     '''PASTA-3D'''
     x_array = cga3d_vector_array_to_nparray(x)
     y_array = cga3d_vector_array_to_nparray(y)
@@ -186,20 +181,7 @@ def estimate_transformation_VGA(x,y,npoints):
 
     return (T_est,R_est)
 
-def estimate_transformation_sdrsac(x,y,npoints):
-    '''SDRSAC'''
-
-    x_array = cga3d_vector_array_to_nparray(x)
-    y_array = cga3d_vector_array_to_nparray(y)
-
-    R_matrix, t_vec = sdrsac.sdrsac(x_array, y_array)
-
-    T_est, R_est = rotation_translation_to_translator_rotator(R_matrix,t_vec)
-
-    return (T_est,R_est)
-
-
-def __estimate_transformation_dcp__(x_nparray,y_nparray):
+def __estimate_transformation_DCP__(x_nparray,y_nparray):
     x_torch = torch.from_numpy(x_nparray).unsqueeze(2).T.float()
     y_torch = torch.from_numpy(y_nparray).unsqueeze(2).T.float()
 
@@ -214,9 +196,8 @@ def __estimate_transformation_dcp__(x_nparray,y_nparray):
     return (T_est,R_est)
 
 
-def estimate_transformation_dcp(x,y,npoints):
+def estimate_transformation_DCP(x,y,npoints):
     '''DCP'''
-
     every_k_points = 10
 
     x_nparray = cga3d_vector_array_to_nparray(x)
@@ -234,7 +215,7 @@ def estimate_transformation_dcp(x,y,npoints):
     x_nparray = np.asarray(x_pcd.points)
     y_nparray = np.asarray(y_pcd.points)
 
-    return __estimate_transformation_dcp__(x_nparray,y_nparray)
+    return __estimate_transformation_DCP__(x_nparray,y_nparray)
 
 def numpy_to_icp_point3D(array):
     plist = array.tolist();
@@ -274,31 +255,6 @@ def convert_to_list_of_matrices(array):
         lst += [np.asmatrix(array[i,:,np.newaxis])]
     return lst
 
-def __estimate_transformation_FPFH__(x_array,y_array):
-
-    et = 0.1
-    div = 2
-    nneighbors = 8
-    rad = 0.01
-
-    Icp = FPFH(et, div, nneighbors, rad)   # Fast PFH
-    transformed_source = Icp.solve(convert_to_list_of_matrices(x_array), convert_to_list_of_matrices(y_array))
-    R_list = Icp._Rlist
-    t_list = Icp._tlist
-
-    # Calculate the final R and t which were applied to the source cloud
-    R_final = np.matrix([[1,0,0],[0,1,0],[0,0,1]])
-    for R in R_list:
-        R_final = R.dot(R_final)
-    i = 0
-    t_final = t_list[0]
-    for i in range(1, len(t_list)):
-        t_final = R_list[i]*t_final + t_list[i]
-
-    T_est,R_est = rotation_translation_to_translator_rotator(R_final,t_final.T[0])
-    
-    return (T_est,R_est)
-
 def estimate_transformation_TEASER(x,y,npoints):
     """TEASER++"""
 
@@ -314,7 +270,6 @@ def estimate_transformation_TEASER(x,y,npoints):
     return __estimate_transformation_TEASER__(x_pcd,y_pcd)
 
 def __estimate_transformation_TEASER__(x_pcd,y_pcd):
-
     VOXEL_SIZE = 0.001
     # x_pcd = x_pcd.voxel_down_sample(voxel_size=VOXEL_SIZE)
     # y_pcd = x_pcd.voxel_down_sample(voxel_size=VOXEL_SIZE)
@@ -343,21 +298,11 @@ def __estimate_transformation_TEASER__(x_pcd,y_pcd):
     return T_est,R_est
 
 
-# Estimate with know correspondences
-def estimate_transformation_corr_VGA(x,y,npoints):
-    '''VGA RBM Known Corrs'''
-    x_bar = x.sum()/npoints
-    y_bar = y.sum()/npoints
-    R_est = estimate_rot_3dvga(x-x_bar,y-y_bar)
-    T_est = translation_from_cofm(y,x,R_est,npoints)
-    return (T_est,R_est)
-
-algorithms_list = [estimate_transformation_pasta,
+algorithms_list = [estimate_transformation_PASTA,
                    estimate_transformation_ICP,
                    estimate_transformation_CGA,
                    estimate_transformation_VGA,
-                   estimate_transformation_dcp,
-                   estimate_transformation_corr_VGA,
+                   estimate_transformation_DCP,
                    estimate_transformation_TEASER]
 
 def get_alg_name_list(algorithms):

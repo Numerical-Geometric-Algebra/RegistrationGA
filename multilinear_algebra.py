@@ -53,31 +53,6 @@ def convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis):
     eigenvalues_ordered = eigenvalues[indices]
     return Y_ordered,np.real(eigenvalues_ordered)
 
-def convert_numpyeigvecs_to_eigmvs_1(eigenvalues, eigenvectors,basis,rec_basis,upss):
-    '''From a set of eigenvectors computes the eigenmultivectors and orders the result by the absolute value of the eigenvalues
-    upss: The unit pseudoscalar. It should behave as the unit imaginary, that is, it must square to minus one and commutes with all elements
-    '''
-    Y = [0]*len(eigenvalues)
-    # Convert the eigenvectors to eigenmultivectors
-    for i in range(len(eigenvalues)):
-        u = np.real(eigenvectors[:,i])
-        v = np.imag(eigenvectors[:,i])
-        for j in range(len(basis)):
-            Y[i] += u[j]*basis[j] + v[j]*basis[j]*upss
-
-    #Order eigenmultivectors and eigenvalues by the absolute value of the eigenvalues
-    indices = np.argsort(np.abs(eigenvalues))
-    Y_ordered = [Y[i] for i in indices]
-    eigenvalues_ordered = eigenvalues[indices]
-
-    # Convert complex eigenvalues to scalar + pseudoscalar 
-    eigvalsga = [0]*len(eigenvalues_ordered)
-    for i in range(len(eigenvalues_ordered)):
-        eigvalsga[i] = np.real(eigenvalues_ordered[i]) + upss*np.imag(eigenvalues_ordered[i])
-
-
-    return Y_ordered,eigvalsga
-
 def compute_ortho_matrix_check(a):
     matrix = np.zeros([len(a),len(a)])
     for i in range(len(a)):
@@ -112,15 +87,7 @@ def symmetric_eigen_decomp(F,basis,rec_basis):
     '''Solves the eigendecomposition of a multilinear symmetric function F'''
     F_matrix = get_matrix(F,basis,rec_basis)
     eigenvalues, eigenvectors = np.linalg.eig(F_matrix.T)
-    print(eigenvalues)
     return convert_numpyeigvecs_to_eigmvs(eigenvalues, eigenvectors,basis,rec_basis)
-
-def symmetric_eigen_decomp_1(F,basis,rec_basis,upss):
-    '''Solves the eigendecomposition of a multilinear symmetric function F'''
-    F_matrix = get_matrix(F,basis,rec_basis)
-    eigenvalues, eigenvectors = np.linalg.eig(F_matrix.T)
-    print(eigenvalues)
-    return convert_numpyeigvecs_to_eigmvs_1(eigenvalues, eigenvectors,basis,rec_basis,upss)
 
 def symmetric_eigen_blades_decomp(F,basis,rec_basis):
     a,lambda_a = symmetric_eigen_decomp(F,basis,rec_basis)

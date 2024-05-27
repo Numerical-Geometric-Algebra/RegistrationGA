@@ -232,7 +232,7 @@ def get_name_filepath(filepath):
 if __name__ == '__main__':
 
     show_plot = True # Set to true to show the plots imediatly 
-    save_data = True # Set to true to save a .pickle file with the data, saves in the Benchmark folder
+    save_data = False # Set to true to save a .pickle file with the data, saves in the Benchmark folder
     save_plot = False # Set to true to save the plot (needs show_plot = True), saves in the Plots folder
     
     ratio = 1
@@ -243,11 +243,7 @@ if __name__ == '__main__':
     plt_bench.set_dark_background()
 
     # Chose the point cloud that is being benchmarked
-    # filename = f"/home/francisco/Code/Stanford Dataset/dragon_fillers/dragonMouth5_0.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/Armadillo_scans/ArmadilloBack_0.ply"
-    filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
-    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res3.ply" 
-    # filename = f"/home/francisco/Code/Stanford Dataset/bunny/reconstruction/bun_zipper.ply" 
+    filename = f"~/Code/Stanford Dataset/bunny/reconstruction/bun_zipper_res2.ply"
 
     pcd = o3d.io.read_point_cloud(filename)
     pcd = pcd.uniform_down_sample(every_k_points)
@@ -291,7 +287,7 @@ if __name__ == '__main__':
     '''Increasing the NOISE of the point clouds'''
     trajectory = False # The rotation and translations are not cummulative
     random_transformation = True
-    niters = 10 # Number of iterations for each experiment
+    niters = 1 # Number of iterations for each experiment
     
     # Big transformation
     # tscaling = 1 # The magnitude of the translation

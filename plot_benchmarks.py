@@ -450,15 +450,11 @@ def plot_multiple_benchmarks():
     # Chose multiple algorithms
     alg_names = ["ICP","CGA-EVD","PASTA 3D"]
 
-    # Chose multiple files    
+    # Chose multiple files
 
-    # filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_29_04_2024_18_52_02.pickle",
-    #              f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_04_2024_19_47_08.pickle",
-    #              f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_30_04_2024_08_33_00.pickle"]
-
-    filenames = ["/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
-                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
-                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
+    filenames = ["~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
+                 "~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
+                 "~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
 
     titles = ["Bunny","Armadillo","Dragon"]
     dcts = []
@@ -517,9 +513,9 @@ def generate_table_times(dcts,names):
     return string
 
 def generate_time_tables_from_files():
-    filenames = ["/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
-                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
-                 "/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
+    filenames = ["~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle",
+                 "~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle",
+                 "~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle"]
 
     names = ["Bunny","Armadillo","Dragon"]
 
@@ -537,10 +533,10 @@ def plot_multiple_histograms():
     alg_names = ["VGA-EVD","CGA-EVD"]
 
     # Chose multiple files
-    filenames = [f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01_ArmadilloBack_0_05_03_2024_10_52_47.pickle",
-                 f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_02_ArmadilloBack_0_05_03_2024_11_14_47.pickle"]
+    filenames = [f"~/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_001_ArmadilloBack_0_05_03_2024_10_11_03.pickle",
+                 f"~/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle",
+                 f"~/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_01_ArmadilloBack_0_05_03_2024_10_52_47.pickle",
+                 f"~/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_02_ArmadilloBack_0_05_03_2024_11_14_47.pickle"]
 
     titles = [r"$\sigma=0.001$",r"$\sigma=0.005$",r"$\sigma=0.01$",r"$\sigma=0.02$"]
 
@@ -602,13 +598,13 @@ if __name__ == "__main__":
     # alg_names = ["CGA-EVD","VGA-EVD"]
     
     ''' Load a pickle file and plot the data'''
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle" # 1st table
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle" # 2nd table
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle" # 3rd table
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_bun_zipper_res2_29_04_2024_19_20_55.pickle" # 1st table
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_ArmadilloBack_0_29_04_2024_20_18_21.pickle" # 2nd table
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_0_01_varsigma_dragonMouth5_0_30_04_2024_09_04_32.pickle" # 3rd table
 
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_29_04_2024_18_52_02.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_04_2024_19_47_08.pickle"
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_30_04_2024_08_33_00.pickle"
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_bun_zipper_res2_29_04_2024_18_52_02.pickle"
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_ArmadilloBack_0_29_04_2024_19_47_08.pickle"
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_magpos_1_varsigma_dragonMouth5_0_30_04_2024_08_33_00.pickle"
     
     
     # with open(filename, "rb") as f:
@@ -624,7 +620,7 @@ if __name__ == "__main__":
     # plot_multiple_benchmarks()
 
     # ''' Load a pickle file and plot an histogram '''
-    # filename = f"/home/francisco/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
+    # filename = f"~/Code/RegistrationGA/Benchmarks/benchmark_single_sigma_0_005_ArmadilloBack_0_05_03_2024_10_31_38.pickle"
     # with open(filename, "rb") as f:
     #     dct = pickle.load(f)
     # dct = filter_dictionary_single_exp(dct,alg_names)

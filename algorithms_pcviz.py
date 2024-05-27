@@ -1,12 +1,6 @@
 from cga3d_estimation import *
-# from point_cloud_vis_II import PointCloudSettings
-import pasta3d
 import open3d as o3d
-
-import sdrsac
-from dcp_model import *
-
-from algorithms import __estimate_transformation_dcp__, __estimate_transformation_ICP__, __estimate_transformation_CGA__, __estimate_transformation_GOICP__, __estimate_transformation_TEASER__
+from algorithms import __estimate_transformation_DCP__, __estimate_transformation_ICP__, __estimate_transformation_CGA__, __estimate_transformation_GOICP__, __estimate_transformation_TEASER__
 from algorithms import *
 
 ''' This script is aimed to define different algorithms to determine the rigid transformation between point cloud
@@ -38,8 +32,9 @@ def estimate_transformation_CGA__(source,target):
     return T_est*R_est
 
 
-def estimate_transformation_pasta__(source,target):
+def estimate_transformation_PASTA__(source,target):
     '''PASTA-3D'''
+    import pasta3d
     x_array = source.get_pcd_as_nparray()
     y_array = target.get_pcd_as_nparray()
 
@@ -86,12 +81,12 @@ def estimate_transformation_sdrsac__(source,target):
     return M_est
 
 
-def estimate_transformation_dcp__(source,target):
+def estimate_transformation_DCP__(source,target):
     '''DCP'''
     x_nparray = source.get_pcd_as_nparray()
     y_nparray = target.get_pcd_as_nparray()
 
-    T_est,R_est = __estimate_transformation_dcp__(x_nparray,y_nparray)
+    T_est,R_est = __estimate_transformation_DCP__(x_nparray,y_nparray)
 
     return T_est*R_est
 
@@ -114,10 +109,10 @@ def estimate_transformation_TEASER__(source,target):
 
 alg_lst = [estimate_transformation_CGA__,
            estimate_transformation_VGA__,
-           estimate_transformation_pasta__,
+           estimate_transformation_PASTA__,
            estimate_transformation_ICP__,
            estimate_transformation_sdrsac__,
-           estimate_transformation_dcp__,
+           estimate_transformation_DCP__,
            estimate_transformation_GOICP__,
            estimate_transformation_TEASER__]
 
