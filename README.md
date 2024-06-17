@@ -14,12 +14,14 @@ pip install gasparse
 
 Build and Install from source
 ```shell
+  git clone https://github.com/Numerical-Geometric-Algebra/gasparse.git
   cd gasparse
   pip install .
 ```
 
 Installing from wheels 
 ```shell
+  git clone https://github.com/Numerical-Geometric-Algebra/gasparse.git
   cd gasparse
   pip install wheelhouse/gasparse-0.0.5a0-cp37-cp37m-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl
 ```
